@@ -163,7 +163,7 @@ contract PaymentRouterIntegrationTest is Test {
         IAgentAuthorization.PaymentIntent memory intent = _intent(requestId, 5 * USDC, 0);
 
         vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSelector(PaymentRouter.UnauthorizedAgent.selector, attacker, agent));
+        vm.expectRevert(PaymentRouter.UnauthorizedCaller.selector);
         router.execute(intent);
 
         assertEq(vault.totalSpent(), 0);
