@@ -6,12 +6,17 @@ import {MockUSDC} from "../src/mocks/MockUSDC.sol";
 import {AgentSpendingVault} from "../src/AgentSpendingVault.sol";
 import {ProviderRegistry} from "../src/ProviderRegistry.sol";
 import {StakeManager} from "../src/StakeManager.sol";
+import {PaymentEscrow} from "../src/PaymentEscrow.sol";
+import {DeliveryVerifier} from "../src/DeliveryVerifier.sol";
 
 contract AgentSpendingVaultTest is Test {
     MockUSDC internal usdc;
     ProviderRegistry internal registry;
     StakeManager internal stakeManager;
     AgentSpendingVault internal vault;
+    PaymentEscrow internal escrow;
+    DeliveryVerifier internal verifier;
+    address internal treasury = address(0x999);
 
     address internal owner = address(0xA11CE);
     address internal agent = address(0xB0B);
@@ -37,6 +42,11 @@ contract AgentSpendingVaultTest is Test {
         // -------------------------------------------------
         stakeManager = new StakeManager(owner, address(usdc), address(registry), MINIMUM_STAKE);
 
+        verifier = new DeliveryVerifier();
+        escrow = new PaymentEscrow(
+            owner, address(usdc), address(registry), address(stakeManager), address(verifier), treasury
+        );
+
         // -------------------------------------------------
         // 4. Deploy AgentSpendingVault
         // -------------------------------------------------
@@ -57,6 +67,9 @@ contract AgentSpendingVaultTest is Test {
         // 7. Connect StakeManager to vault
         // -------------------------------------------------
         vault.setStakeManager(address(stakeManager));
+        vault.setPaymentEscrow(address(escrow));
+        escrow.setCreatorAuthorization(address(vault), true);
+        stakeManager.setLockerAuthorization(address(escrow), true);
 
         // -------------------------------------------------
         // 8. Fund owner
@@ -99,9 +112,9 @@ contract AgentSpendingVaultTest is Test {
 
         vm.prank(agent);
 
-        vault.pay(requestId, provider, 10 * USDC);
+        vault.createJob(requestId, provider, 10 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE"));
 
-        assertEq(usdc.balanceOf(provider), 60 * USDC);
+        assertEq(usdc.balanceOf(address(escrow)), 10 * USDC); // 10 was transferred to escrow
 
         assertEq(vault.totalSpent(), 10 * USDC);
 
@@ -115,7 +128,7 @@ contract AgentSpendingVaultTest is Test {
 
         vm.expectRevert(AgentSpendingVault.UnauthorizedAgent.selector);
 
-        vault.pay(requestId, provider, 10 * USDC);
+        vault.createJob(requestId, provider, 10 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE"));
     }
 
     function testIneligibleProviderReverts() public {
@@ -127,7 +140,9 @@ contract AgentSpendingVaultTest is Test {
 
         vm.expectRevert(AgentSpendingVault.ProviderNotEligible.selector);
 
-        vault.pay(requestId, unregisteredProvider, 10 * USDC);
+        vault.createJob(
+            requestId, unregisteredProvider, 10 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE")
+        );
     }
 
     function testPaymentAbovePerTxCapReverts() public {
@@ -137,7 +152,7 @@ contract AgentSpendingVaultTest is Test {
 
         vm.expectRevert(AgentSpendingVault.PerTxCapExceeded.selector);
 
-        vault.pay(requestId, provider, 26 * USDC);
+        vault.createJob(requestId, provider, 26 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE"));
     }
 
     function testTotalCapReverts() public {
@@ -147,11 +162,15 @@ contract AgentSpendingVaultTest is Test {
 
         vm.startPrank(agent);
 
-        vault.pay(keccak256("total-1"), provider, 60 * USDC);
+        vault.createJob(
+            keccak256("total-1"), provider, 60 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE")
+        );
 
         vm.expectRevert(AgentSpendingVault.TotalCapExceeded.selector);
 
-        vault.pay(keccak256("total-2"), provider, 41 * USDC);
+        vault.createJob(
+            keccak256("total-2"), provider, 41 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE")
+        );
 
         vm.stopPrank();
     }
@@ -159,13 +178,19 @@ contract AgentSpendingVaultTest is Test {
     function testDailyCapReverts() public {
         vm.startPrank(agent);
 
-        vault.pay(keccak256("daily-1"), provider, 25 * USDC);
+        vault.createJob(
+            keccak256("daily-1"), provider, 25 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE")
+        );
 
-        vault.pay(keccak256("daily-2"), provider, 25 * USDC);
+        vault.createJob(
+            keccak256("daily-2"), provider, 25 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE")
+        );
 
         vm.expectRevert(AgentSpendingVault.DailyCapExceeded.selector);
 
-        vault.pay(keccak256("daily-3"), provider, 1 * USDC);
+        vault.createJob(
+            keccak256("daily-3"), provider, 1 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE")
+        );
 
         vm.stopPrank();
     }
@@ -173,9 +198,23 @@ contract AgentSpendingVaultTest is Test {
     function testDailyCapResetsAfter24Hours() public {
         vm.startPrank(agent);
 
-        vault.pay(keccak256("daily-reset-1"), provider, 25 * USDC);
+        vault.createJob(
+            keccak256("daily-reset-1"),
+            provider,
+            25 * USDC,
+            10 * USDC,
+            block.timestamp + 2 hours,
+            keccak256("GPU_COMPUTE")
+        );
 
-        vault.pay(keccak256("daily-reset-2"), provider, 25 * USDC);
+        vault.createJob(
+            keccak256("daily-reset-2"),
+            provider,
+            25 * USDC,
+            10 * USDC,
+            block.timestamp + 2 hours,
+            keccak256("GPU_COMPUTE")
+        );
 
         vm.stopPrank();
 
@@ -191,11 +230,11 @@ contract AgentSpendingVaultTest is Test {
 
         vm.startPrank(agent);
 
-        vault.pay(requestId, provider, 10 * USDC);
+        vault.createJob(requestId, provider, 10 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE"));
 
         vm.expectRevert(AgentSpendingVault.RequestAlreadyUsed.selector);
 
-        vault.pay(requestId, provider, 10 * USDC);
+        vault.createJob(requestId, provider, 10 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE"));
 
         vm.stopPrank();
     }
@@ -207,9 +246,23 @@ contract AgentSpendingVaultTest is Test {
 
         vm.startPrank(agent);
 
-        vault.pay(keccak256("legitimate-1"), provider, 25 * USDC);
+        vault.createJob(
+            keccak256("legitimate-1"),
+            provider,
+            25 * USDC,
+            10 * USDC,
+            block.timestamp + 2 hours,
+            keccak256("GPU_COMPUTE")
+        );
 
-        vault.pay(keccak256("legitimate-2"), provider, 17 * USDC);
+        vault.createJob(
+            keccak256("legitimate-2"),
+            provider,
+            17 * USDC,
+            10 * USDC,
+            block.timestamp + 2 hours,
+            keccak256("GPU_COMPUTE")
+        );
 
         vm.stopPrank();
 
@@ -219,7 +272,14 @@ contract AgentSpendingVaultTest is Test {
 
         vm.expectRevert(AgentSpendingVault.TotalCapExceeded.selector);
 
-        vault.pay(keccak256("malicious-overspend"), provider, 70 * USDC);
+        vault.createJob(
+            keccak256("malicious-overspend"),
+            provider,
+            70 * USDC,
+            10 * USDC,
+            block.timestamp + 2 hours,
+            keccak256("GPU_COMPUTE")
+        );
     }
 
     function testInsufficientVaultBalanceReverts() public {
@@ -231,7 +291,14 @@ contract AgentSpendingVaultTest is Test {
 
         vm.expectRevert(AgentSpendingVault.InsufficientVaultBalance.selector);
 
-        vault.pay(keccak256("insufficient"), provider, 25 * USDC);
+        vault.createJob(
+            keccak256("insufficient"),
+            provider,
+            25 * USDC,
+            10 * USDC,
+            block.timestamp + 2 hours,
+            keccak256("GPU_COMPUTE")
+        );
     }
 
     function testAgentCannotChangePolicy() public {
@@ -259,7 +326,9 @@ contract AgentSpendingVaultTest is Test {
 
         vm.expectRevert();
 
-        vault.pay(keccak256("paused"), provider, 10 * USDC);
+        vault.createJob(
+            keccak256("paused"), provider, 10 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE")
+        );
     }
 
     function testUnpauseAllowsPayment() public {
@@ -272,9 +341,11 @@ contract AgentSpendingVaultTest is Test {
 
         vm.prank(agent);
 
-        vault.pay(keccak256("unpaused"), provider, 10 * USDC);
+        vault.createJob(
+            keccak256("unpaused"), provider, 10 * USDC, 10 * USDC, block.timestamp + 2 hours, keccak256("GPU_COMPUTE")
+        );
 
-        assertEq(usdc.balanceOf(provider), 60 * USDC);
+        assertEq(usdc.balanceOf(address(escrow)), 10 * USDC); // 10 was transferred to escrow
     }
 
     function testInvalidPolicyReverts() public {

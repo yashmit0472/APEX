@@ -7,6 +7,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IStakeManager} from "./interfaces/IStakeManager.sol";
+import {IPaymentEscrow} from "./interfaces/IPaymentEscrow.sol";
 
 contract AgentSpendingVault is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
@@ -14,6 +15,7 @@ contract AgentSpendingVault is Ownable, ReentrancyGuard, Pausable {
     IERC20 public immutable usdc;
     address public agent;
     IStakeManager public stakeManager;
+    IPaymentEscrow public paymentEscrow;
 
     struct Policy {
         uint256 maxSpend;
@@ -46,6 +48,8 @@ contract AgentSpendingVault is Ownable, ReentrancyGuard, Pausable {
 
     event StakeManagerUpdated(address indexed manager);
 
+    event PaymentEscrowUpdated(address indexed escrow);
+
     error InvalidAgent();
     error InvalidProvider();
     error InvalidAmount();
@@ -59,6 +63,7 @@ contract AgentSpendingVault is Ownable, ReentrancyGuard, Pausable {
     error RequestAlreadyUsed();
     error StakeManagerNotConfigured();
     error ProviderNotEligible();
+    error EscrowNotConfigured();
 
     constructor(address initialOwner, address usdcToken, address initialAgent) Ownable(initialOwner) {
         if (usdcToken == address(0)) {
@@ -156,7 +161,14 @@ contract AgentSpendingVault is Ownable, ReentrancyGuard, Pausable {
         emit FundsWithdrawn(to, amount);
     }
 
-    function pay(bytes32 requestId, address provider, uint256 amount) external onlyAgent whenNotPaused nonReentrant {
+    function createJob(
+        bytes32 requestId,
+        address provider,
+        uint256 amount,
+        uint256 stakeRequired,
+        uint256 deadline,
+        bytes32 serviceId
+    ) external onlyAgent whenNotPaused nonReentrant returns (uint256 jobId) {
         if (requestId == bytes32(0)) {
             revert InvalidAmount();
         }
@@ -176,9 +188,13 @@ contract AgentSpendingVault is Ownable, ReentrancyGuard, Pausable {
         if (address(stakeManager) == address(0)) {
             revert StakeManagerNotConfigured();
         }
-        if (!stakeManager.isEligible(provider)) {
-            revert ProviderNotEligible();
+
+        if (address(paymentEscrow) == address(0)) {
+            revert EscrowNotConfigured();
         }
+
+        // We delegate provider eligibility checks to the PaymentEscrow
+        // but we can also check here if we want. PaymentEscrow will check.
 
         _resetDailyWindowIfNeeded();
 
@@ -205,7 +221,9 @@ contract AgentSpendingVault is Ownable, ReentrancyGuard, Pausable {
         totalSpent += amount;
         dailySpent += amount;
 
-        usdc.safeTransfer(provider, amount);
+        usdc.approve(address(paymentEscrow), amount);
+
+        jobId = paymentEscrow.createJob(provider, amount, stakeRequired, deadline, serviceId);
 
         emit PaymentExecuted(requestId, provider, amount);
     }
@@ -252,6 +270,16 @@ contract AgentSpendingVault is Ownable, ReentrancyGuard, Pausable {
         stakeManager = IStakeManager(manager);
 
         emit StakeManagerUpdated(manager);
+    }
+
+    function setPaymentEscrow(address escrow) external onlyOwner {
+        if (escrow == address(0)) {
+            revert InvalidProvider();
+        }
+
+        paymentEscrow = IPaymentEscrow(escrow);
+
+        emit PaymentEscrowUpdated(escrow);
     }
 
     function _resetDailyWindowIfNeeded() internal {
