@@ -14,6 +14,7 @@ contract PaymentRouter {
     error InvalidRequestId();
     error UnauthorizedCaller();
     error RequestNotPending(bytes32 requestId);
+    error UnauthorizedAgent(address caller, address agent);
 
     constructor(address authorization_, address firewall_) {
         if (authorization_ == address(0) || firewall_ == address(0)) {
@@ -33,6 +34,10 @@ contract PaymentRouter {
         }
         if (msg.sender != intent.agent) {
             revert UnauthorizedCaller();
+        }
+
+        if (msg.sender != intent.agent) {
+            revert UnauthorizedAgent(msg.sender, intent.agent);
         }
 
         authorization.validateIntent(intent);

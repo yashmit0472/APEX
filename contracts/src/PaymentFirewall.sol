@@ -28,6 +28,7 @@ contract PaymentFirewall is IPaymentFirewall, Ownable {
     mapping(bytes32 => PendingRequest) private pendingRequests;
     mapping(address => uint256[]) private providerRequestTimes;
     mapping(address => mapping(address => bool)) public hasSuccessfulPayment;
+    mapping(address => bool) public authorizedEvaluators;
     mapping(address => bool) public authorizedRecorders;
 
     error InvalidAddress();
@@ -39,6 +40,7 @@ contract PaymentFirewall is IPaymentFirewall, Ownable {
     error RequestBlocked(uint256 score);
     error RequestAlreadyPending(bytes32 requestId);
     error NotPending(bytes32 requestId);
+    error UnauthorizedEvaluator();
     error UnauthorizedRecorder();
 
     event RiskEvaluated(bytes32 indexed requestId, uint256 score, Decision decision);
@@ -56,6 +58,7 @@ contract PaymentFirewall is IPaymentFirewall, Ownable {
         uint256 frequencyWindow,
         uint256 frequencyLimit
     );
+    event EvaluatorAuthorizationUpdated(address indexed evaluator, bool authorized);
     event RecorderAuthorizationUpdated(address indexed recorder, bool authorized);
 
     constructor(address initialOwner, address spendingVault_, address stakeManager_) Ownable(initialOwner) {
@@ -136,12 +139,22 @@ contract PaymentFirewall is IPaymentFirewall, Ownable {
         emit RecorderAuthorizationUpdated(recorder, authorized);
     }
 
+    function setEvaluatorAuthorization(address evaluator, bool authorized) external onlyOwner {
+        if (evaluator == address(0)) {
+            revert InvalidAddress();
+        }
+
+        authorizedEvaluators[evaluator] = authorized;
+
+        emit EvaluatorAuthorizationUpdated(evaluator, authorized);
+    }
+
     function evaluate(address agent, address provider, uint256 amount, bytes32 requestId)
         external
         returns (uint256 score, Decision decision)
     {
-        if (!authorizedRecorders[msg.sender]) {
-            revert UnauthorizedRecorder();
+        if (!authorizedEvaluators[msg.sender]) {
+            revert UnauthorizedEvaluator();
         }
 
         if (agent == address(0)) {
@@ -290,7 +303,7 @@ contract PaymentFirewall is IPaymentFirewall, Ownable {
         uint256 recentRequests;
 
         for (uint256 index = requestTimes.length; index > 0; index--) {
-            if (requestTimes[index - 1] < cutoff) {
+            if (recentRequests >= frequencyLimit || requestTimes[index - 1] < cutoff) {
                 break;
             }
             recentRequests++;

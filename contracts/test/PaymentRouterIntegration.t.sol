@@ -30,6 +30,7 @@ contract PaymentRouterIntegrationTest is Test {
     address internal owner = address(1);
     address internal agent = address(2);
     address internal provider = address(3);
+    address internal attacker = address(5);
     address internal treasury = address(4);
 
     uint256 internal constant USDC = 1e6;
@@ -57,6 +58,7 @@ contract PaymentRouterIntegrationTest is Test {
         escrow.setCreatorAuthorization(address(vault), true);
         stakeManager.setLockerAuthorization(address(escrow), true);
         authorization.setRouterAuthorization(address(router), true);
+        firewall.setEvaluatorAuthorization(address(router), true);
         firewall.setRecorderAuthorization(address(router), true);
         firewall.setPolicy(40, 70, 90, 100, 0, 0, 0, 1 days, 10);
         authorization.authorizeAgent(
@@ -156,13 +158,17 @@ contract PaymentRouterIntegrationTest is Test {
         assertEq(uint256(firewall.getPendingRequest(requestId).status), uint256(IPaymentFirewall.PendingStatus.None));
     }
 
-    function testNonAgentCannotExecuteAnotherAgentsIntent() public {
-        bytes32 requestId = keccak256("forged-caller");
+    function testCallerCannotSubmitIntentForAnotherAgent() public {
+        bytes32 requestId = keccak256("forged-agent");
         IAgentAuthorization.PaymentIntent memory intent = _intent(requestId, 5 * USDC, 0);
 
-        vm.prank(address(99));
-        vm.expectRevert(PaymentRouter.UnauthorizedCaller.selector);
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(PaymentRouter.UnauthorizedAgent.selector, attacker, agent));
         router.execute(intent);
+
+        assertEq(vault.totalSpent(), 0);
+        assertEq(escrow.nextJobId(), 0);
+        assertEq(uint256(firewall.getPendingRequest(requestId).status), uint256(IPaymentFirewall.PendingStatus.None));
     }
 
     function _intent(bytes32 requestId, uint256 amount, uint256 nonce)

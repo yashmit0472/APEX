@@ -60,11 +60,10 @@ contract PaymentFirewallTest is Test {
         vault.setCaps(100, 100, 100);
         stakeManager.setAvailableStake(type(uint256).max);
 
-        vm.prank(owner);
+        vm.startPrank(owner);
         firewall.setPolicy(40, 70, 90, 100, 0, 0, 0, 1 days, 10);
-
-        vm.prank(owner);
-        firewall.setRecorderAuthorization(address(this), true);
+        firewall.setEvaluatorAuthorization(address(this), true);
+        vm.stopPrank();
     }
 
     function testLowRiskRequestAutoPaysWithoutPendingState() public {
@@ -75,12 +74,6 @@ contract PaymentFirewallTest is Test {
         assertEq(score, 10);
         assertEq(uint256(decision), uint256(IPaymentFirewall.Decision.AUTO_PAY));
         assertEq(uint256(firewall.getPendingRequest(requestId).status), uint256(IPaymentFirewall.PendingStatus.None));
-    }
-
-    function testEvaluateRevertsForUnauthorizedCaller() public {
-        vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSelector(PaymentFirewall.UnauthorizedRecorder.selector));
-        firewall.evaluate(agent, provider, 10, keccak256("unauthorized-evaluate"));
     }
 
     function testMediumRiskRequestFlagsAndStillProceeds() public {
@@ -214,6 +207,23 @@ contract PaymentFirewallTest is Test {
         vm.prank(attacker);
         vm.expectRevert();
         firewall.setPolicy(30, 60, 85, 10, 20, 30, 40, 2 days, 25);
+    }
+
+    function testUnauthorizedCallerCannotEvaluate() public {
+        vm.prank(attacker);
+        vm.expectRevert(PaymentFirewall.UnauthorizedEvaluator.selector);
+        firewall.evaluate(agent, provider, 10, keccak256("unauthorized"));
+    }
+
+    function testFrequencyRiskStopsCountingAtConfiguredLimit() public {
+        vm.prank(owner);
+        firewall.setPolicy(40, 70, 90, 0, 0, 100, 0, 1 days, 2);
+
+        firewall.evaluate(agent, provider, 1, keccak256("frequency-1"));
+        firewall.evaluate(agent, provider, 1, keccak256("frequency-2"));
+
+        vm.expectRevert(abi.encodeWithSelector(PaymentFirewall.RequestBlocked.selector, 100));
+        firewall.evaluate(agent, provider, 1, keccak256("frequency-3"));
     }
 
     function testFuzzAmountRiskIsBoundedAndMonotonic(uint256 cap, uint256 lowerAmountSeed, uint256 upperAmountSeed)
