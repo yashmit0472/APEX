@@ -54,4 +54,5 @@ interface IAgentAuthorization {
     function nonces(address agent) external view returns (uint256);
 
     function getAgentPolicy(address agent) external view returns (AgentPolicy memory);
+    function setRouterAuthorization(address router, bool authorized) external;
 }
