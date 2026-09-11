@@ -1,0 +1,29 @@
+# Node
+node_modules/
+.next/
+out/
+dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Foundry
+contracts/cache/
+contracts/out/
+contracts/broadcast/
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
