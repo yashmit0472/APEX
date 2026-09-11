@@ -14,6 +14,7 @@ contract AgentAuthorization is IAgentAuthorization, Ownable, ReentrancyGuard {
     mapping(address => uint256) private _nonces;
 
     mapping(bytes32 => bool) public usedRequestIds;
+    mapping(address => bool) public authorizedRouters;
 
     mapping(address => uint256) public totalSpent;
     mapping(address => uint256) public dailySpent;
@@ -39,6 +40,7 @@ contract AgentAuthorization is IAgentAuthorization, Ownable, ReentrancyGuard {
 
     error RequestAlreadyUsed();
     error InvalidNonce();
+    error UnauthorizedRouter();
 
     event AgentAuthorized(
         address indexed agent,
@@ -65,6 +67,8 @@ contract AgentAuthorization is IAgentAuthorization, Ownable, ReentrancyGuard {
     event PaymentAuthorized(
         address indexed agent, bytes32 indexed requestId, address indexed provider, uint256 amount, uint256 nonce
     );
+
+    event RouterAuthorizationUpdated(address indexed router, bool authorized);
 
     constructor(address initialOwner, address spendingVault_) Ownable(initialOwner) {
         if (spendingVault_ == address(0)) {
@@ -142,6 +146,16 @@ contract AgentAuthorization is IAgentAuthorization, Ownable, ReentrancyGuard {
         emit AgentPolicyUpdated(agent, provider, serviceId, maxSpend, perTxCap, dailyCap, expiresAt);
     }
 
+    function setRouterAuthorization(address router, bool authorized) external onlyOwner {
+        if (router == address(0)) {
+            revert InvalidAddress();
+        }
+
+        authorizedRouters[router] = authorized;
+
+        emit RouterAuthorizationUpdated(router, authorized);
+    }
+
     function isAuthorized(address agent) external view returns (bool) {
         AgentPolicy memory policy = agentPolicies[agent];
 
@@ -154,7 +168,7 @@ contract AgentAuthorization is IAgentAuthorization, Ownable, ReentrancyGuard {
     }
 
     function executePayment(PaymentIntent calldata intent) external nonReentrant returns (uint256 jobId) {
-        if (msg.sender != intent.agent) {
+        if (msg.sender != intent.agent && !authorizedRouters[msg.sender]) {
             revert AgentNotAuthorized();
         }
 
