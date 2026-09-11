@@ -8,6 +8,7 @@ import {StakeManager} from "../src/StakeManager.sol";
 import {ProviderRegistry} from "../src/ProviderRegistry.sol";
 import {MockUSDC} from "../src/mocks/MockUSDC.sol";
 import {IPaymentEscrow} from "../src/interfaces/IPaymentEscrow.sol";
+import {DisputeManager} from "../src/DisputeManager.sol";
 
 contract PaymentEscrowTest is Test {
     MockUSDC token;
@@ -15,12 +16,14 @@ contract PaymentEscrowTest is Test {
     StakeManager stakeManager;
     DeliveryVerifier verifier;
     PaymentEscrow escrow;
+    DisputeManager disputeManager;
 
     address owner = address(1);
     address vault = address(2);
     address provider = address(3);
     address attacker = address(4);
     address treasury = address(5);
+    address arbitrator = address(6);
 
     uint256 constant ONE_USDC = 1_000_000;
     uint256 constant MINIMUM_STAKE = 10_000_000;
@@ -41,10 +44,17 @@ contract PaymentEscrowTest is Test {
         escrow = new PaymentEscrow(
             owner, address(token), address(registry), address(stakeManager), address(verifier), treasury
         );
+        disputeManager = new DisputeManager(owner, arbitrator, 24 hours);
 
         // Authorize vault as a job creator
         vm.prank(owner);
         escrow.setCreatorAuthorization(vault, true);
+
+        vm.prank(owner);
+        escrow.setDisputeManager(address(disputeManager));
+
+        vm.prank(owner);
+        disputeManager.setPaymentEscrow(address(escrow));
 
         // Authorize escrow as a locker on StakeManager
         vm.prank(owner);
@@ -568,5 +578,72 @@ contract PaymentEscrowTest is Test {
         vm.prank(vault);
         vm.expectRevert(PaymentEscrow.ProviderNotEligible.selector);
         escrow.createJob(brokeProvider, 25 * ONE_USDC, 0, block.timestamp + 2 hours, SERVICE_ID);
+    }
+
+    // ── Phase 5 Dispute Accounting ──
+
+    function testActiveDisputeBlocksSettlement() public {
+        uint256 jobId = _createDefaultJob();
+
+        vm.prank(provider);
+        escrow.submitDelivery(jobId, keccak256("result"));
+
+        vm.prank(vault);
+        disputeManager.openDispute(jobId, keccak256("evidence"));
+
+        vm.expectRevert(PaymentEscrow.JobDisputed.selector);
+        escrow.settle(jobId);
+    }
+
+    function testDisputeProviderWins() public {
+        uint256 jobId = _createDefaultJob();
+
+        vm.prank(provider);
+        escrow.submitDelivery(jobId, keccak256("result"));
+
+        vm.prank(vault);
+        disputeManager.openDispute(jobId, keccak256("evidence"));
+
+        uint256 providerBalBefore = token.balanceOf(provider);
+        uint256 lockedBefore = stakeManager.lockedBalance(provider);
+
+        vm.prank(arbitrator);
+        disputeManager.resolveProviderWins(jobId);
+
+        IPaymentEscrow.Job memory job = escrow.getJob(jobId);
+        assertEq(uint8(job.status), uint8(IPaymentEscrow.JobStatus.Settled));
+
+        assertEq(token.balanceOf(provider), providerBalBefore + 25 * ONE_USDC);
+        assertEq(stakeManager.lockedBalance(provider), lockedBefore - 10 * ONE_USDC);
+        assertEq(token.balanceOf(address(escrow)), 0);
+        assertEq(stakeManager.availableStake(provider), 100 * ONE_USDC);
+        assertEq(stakeManager.stakedBalance(provider), 100 * ONE_USDC);
+    }
+
+    function testDisputeAgentWins() public {
+        uint256 jobId = _createDefaultJob();
+
+        vm.prank(provider);
+        escrow.submitDelivery(jobId, keccak256("result"));
+
+        vm.prank(vault);
+        disputeManager.openDispute(jobId, keccak256("evidence"));
+
+        uint256 agentBalBefore = token.balanceOf(vault);
+        uint256 treasuryBefore = token.balanceOf(treasury);
+
+        vm.prank(arbitrator);
+        disputeManager.resolveAgentWins(jobId);
+
+        IPaymentEscrow.Job memory job = escrow.getJob(jobId);
+        assertEq(uint8(job.status), uint8(IPaymentEscrow.JobStatus.Refunded));
+
+        assertEq(token.balanceOf(vault), agentBalBefore + 25 * ONE_USDC);
+        assertEq(token.balanceOf(treasury), treasuryBefore + 10 * ONE_USDC);
+
+        assertEq(stakeManager.lockedBalance(provider), 0);
+        assertEq(stakeManager.availableStake(provider), 90 * ONE_USDC);
+        assertEq(stakeManager.stakedBalance(provider), 90 * ONE_USDC);
+        assertEq(token.balanceOf(address(escrow)), 0);
     }
 }

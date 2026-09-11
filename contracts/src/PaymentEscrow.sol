@@ -9,6 +9,7 @@ import {IPaymentEscrow} from "./interfaces/IPaymentEscrow.sol";
 import {IDeliveryVerifier} from "./interfaces/IDeliveryVerifier.sol";
 import {IProviderRegistry} from "./interfaces/IProviderRegistry.sol";
 import {IStakeManager} from "./interfaces/IStakeManager.sol";
+import {IDisputeManager} from "./interfaces/IDisputeManager.sol";
 
 contract PaymentEscrow is IPaymentEscrow, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -20,6 +21,8 @@ contract PaymentEscrow is IPaymentEscrow, Ownable, ReentrancyGuard {
     IStakeManager public immutable stakeManager;
 
     IDeliveryVerifier public immutable deliveryVerifier;
+
+    IDisputeManager public disputeManager;
 
     address public treasury;
 
@@ -59,6 +62,9 @@ contract PaymentEscrow is IPaymentEscrow, Ownable, ReentrancyGuard {
 
     error TreasuryNotConfigured();
 
+    error JobDisputed();
+    error UnauthorizedDisputeManager();
+
     // ── Events ──
 
     event JobCreated(
@@ -82,6 +88,10 @@ contract PaymentEscrow is IPaymentEscrow, Ownable, ReentrancyGuard {
     event CreatorAuthorizationUpdated(address indexed creator, bool authorized);
 
     event TreasuryUpdated(address indexed treasury);
+
+    event DisputeManagerUpdated(address indexed manager);
+
+    event DisputeSettlement(uint256 indexed jobId, bool providerWon, uint256 paymentAmount, uint256 collateralAmount);
 
     // ── Modifiers ──
 
@@ -152,6 +162,16 @@ contract PaymentEscrow is IPaymentEscrow, Ownable, ReentrancyGuard {
         emit TreasuryUpdated(treasury_);
     }
 
+    function setDisputeManager(address manager) external onlyOwner {
+        if (manager == address(0)) {
+            revert InvalidAddress();
+        }
+
+        disputeManager = IDisputeManager(manager);
+
+        emit DisputeManagerUpdated(manager);
+    }
+
     // ── Core Operations ──
 
     function createJob(address provider, uint256 amount, uint256 stakeRequired, uint256 deadline, bytes32 serviceId)
@@ -205,6 +225,7 @@ contract PaymentEscrow is IPaymentEscrow, Ownable, ReentrancyGuard {
             stakeRequired: stakeRequired,
             createdAt: block.timestamp,
             deadline: deadline,
+            deliveryAt: 0,
             serviceId: serviceId,
             deliveryHash: bytes32(0),
             status: JobStatus.Funded
@@ -233,6 +254,7 @@ contract PaymentEscrow is IPaymentEscrow, Ownable, ReentrancyGuard {
         }
 
         job.deliveryHash = deliveryHash;
+        job.deliveryAt = block.timestamp;
         job.status = JobStatus.WorkSubmitted;
 
         emit DeliverySubmitted(jobId, job.provider, deliveryHash);
@@ -243,6 +265,12 @@ contract PaymentEscrow is IPaymentEscrow, Ownable, ReentrancyGuard {
 
         if (job.status != JobStatus.WorkSubmitted) {
             revert JobNotWorkSubmitted();
+        }
+
+        if (address(disputeManager) != address(0)) {
+            if (disputeManager.isDisputed(jobId)) {
+                revert JobDisputed();
+            }
         }
 
         // Verify delivery through the pluggable verifier
@@ -291,6 +319,46 @@ contract PaymentEscrow is IPaymentEscrow, Ownable, ReentrancyGuard {
         }
 
         emit JobRefunded(jobId, job.agent, job.amount);
+    }
+
+    function resolveDispute(uint256 jobId, bool providerWins) external nonReentrant {
+        if (msg.sender != address(disputeManager)) {
+            revert UnauthorizedDisputeManager();
+        }
+
+        Job storage job = _getJobStorage(jobId);
+
+        if (job.status != JobStatus.WorkSubmitted) {
+            revert JobNotWorkSubmitted();
+        }
+
+        // CEI: change state BEFORE external calls
+        job.status = providerWins ? JobStatus.Settled : JobStatus.Refunded;
+
+        if (providerWins) {
+            // Pay the provider
+            paymentToken.safeTransfer(job.provider, job.amount);
+
+            // Unlock provider collateral
+            if (job.stakeRequired > 0) {
+                stakeManager.unlockStake(job.provider, job.stakeRequired);
+            }
+
+            emit JobSettled(jobId, job.provider, job.amount);
+        } else {
+            // Agent wins: refund payment to the agent
+            paymentToken.safeTransfer(job.agent, job.amount);
+
+            // Slash the provider's locked collateral → treasury
+            if (job.stakeRequired > 0) {
+                stakeManager.slashLocked(job.provider, job.stakeRequired, treasury);
+                emit ProviderSlashed(jobId, job.provider, job.stakeRequired);
+            }
+
+            emit JobRefunded(jobId, job.agent, job.amount);
+        }
+
+        emit DisputeSettlement(jobId, providerWins, job.amount, job.stakeRequired);
     }
 
     // ── Views ──

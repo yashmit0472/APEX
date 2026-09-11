@@ -8,6 +8,7 @@ import {StakeManager} from "../src/StakeManager.sol";
 import {ProviderRegistry} from "../src/ProviderRegistry.sol";
 import {MockUSDC} from "../src/mocks/MockUSDC.sol";
 import {IPaymentEscrow} from "../src/interfaces/IPaymentEscrow.sol";
+import {DisputeManager} from "../src/DisputeManager.sol";
 
 /// @title PaymentEscrow Fuzz & Invariant Tests
 /// @notice Validates core invariants with randomized
@@ -18,11 +19,13 @@ contract PaymentEscrowFuzzTest is Test {
     StakeManager stakeManager;
     DeliveryVerifier verifier;
     PaymentEscrow escrow;
+    DisputeManager disputeManager;
 
     address owner = address(1);
     address vault = address(2);
     address provider = address(3);
     address treasury = address(5);
+    address arbitrator = address(6);
 
     uint256 constant ONE_USDC = 1_000_000;
     uint256 constant MINIMUM_STAKE = 10_000_000;
@@ -40,10 +43,13 @@ contract PaymentEscrowFuzzTest is Test {
         escrow = new PaymentEscrow(
             owner, address(token), address(registry), address(stakeManager), address(verifier), treasury
         );
+        disputeManager = new DisputeManager(owner, arbitrator, 24 hours);
 
         vm.startPrank(owner);
         escrow.setCreatorAuthorization(vault, true);
+        escrow.setDisputeManager(address(disputeManager));
         stakeManager.setLockerAuthorization(address(escrow), true);
+        disputeManager.setPaymentEscrow(address(escrow));
         vm.stopPrank();
 
         vm.prank(provider);

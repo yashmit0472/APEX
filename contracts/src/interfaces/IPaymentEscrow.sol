@@ -21,6 +21,7 @@ interface IPaymentEscrow {
 
         uint256 createdAt;
         uint256 deadline;
+        uint256 deliveryAt;
 
         bytes32 serviceId;
         bytes32 deliveryHash;
@@ -37,6 +38,8 @@ interface IPaymentEscrow {
     function settle(uint256 jobId) external;
 
     function refund(uint256 jobId) external;
+
+    function resolveDispute(uint256 jobId, bool providerWins) external;
 
     function getJob(uint256 jobId) external view returns (Job memory);
 }
