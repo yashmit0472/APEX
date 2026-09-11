@@ -156,6 +156,15 @@ contract PaymentRouterIntegrationTest is Test {
         assertEq(uint256(firewall.getPendingRequest(requestId).status), uint256(IPaymentFirewall.PendingStatus.None));
     }
 
+    function testNonAgentCannotExecuteAnotherAgentsIntent() public {
+        bytes32 requestId = keccak256("forged-caller");
+        IAgentAuthorization.PaymentIntent memory intent = _intent(requestId, 5 * USDC, 0);
+
+        vm.prank(address(99));
+        vm.expectRevert(PaymentRouter.UnauthorizedCaller.selector);
+        router.execute(intent);
+    }
+
     function _intent(bytes32 requestId, uint256 amount, uint256 nonce)
         internal
         view

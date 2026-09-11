@@ -12,6 +12,7 @@ contract PaymentRouter {
 
     error InvalidAddress();
     error InvalidRequestId();
+    error UnauthorizedCaller();
     error RequestNotPending(bytes32 requestId);
 
     constructor(address authorization_, address firewall_) {
@@ -29,6 +30,9 @@ contract PaymentRouter {
     {
         if (intent.requestId == bytes32(0)) {
             revert InvalidRequestId();
+        }
+        if (msg.sender != intent.agent) {
+            revert UnauthorizedCaller();
         }
 
         authorization.validateIntent(intent);
