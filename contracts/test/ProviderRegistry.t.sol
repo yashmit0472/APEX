@@ -18,36 +18,21 @@ contract ProviderRegistryTest is Test {
     function testProviderCanRegister() public {
         vm.prank(provider);
 
-        registry.registerProvider(
-            "AI",
-            "https://provider.example"
-        );
+        registry.registerProvider("AI", "https://provider.example");
 
-        assertTrue(
-            registry.isRegistered(provider)
-        );
+        assertTrue(registry.isRegistered(provider));
 
-        assertTrue(
-            registry.isActive(provider)
-        );
+        assertTrue(registry.isActive(provider));
     }
 
     function testDuplicateRegistrationReverts() public {
         vm.startPrank(provider);
 
-        registry.registerProvider(
-            "AI",
-            "https://provider.example"
-        );
+        registry.registerProvider("AI", "https://provider.example");
 
-        vm.expectRevert(
-            ProviderRegistry.ProviderAlreadyRegistered.selector
-        );
+        vm.expectRevert(ProviderRegistry.ProviderAlreadyRegistered.selector);
 
-        registry.registerProvider(
-            "AI",
-            "https://provider.example"
-        );
+        registry.registerProvider("AI", "https://provider.example");
 
         vm.stopPrank();
     }
@@ -55,68 +40,42 @@ contract ProviderRegistryTest is Test {
     function testEmptyServiceTypeReverts() public {
         vm.prank(provider);
 
-        vm.expectRevert(
-            ProviderRegistry.InvalidServiceType.selector
-        );
+        vm.expectRevert(ProviderRegistry.InvalidServiceType.selector);
 
-        registry.registerProvider(
-            "",
-            "https://provider.example"
-        );
+        registry.registerProvider("", "https://provider.example");
     }
 
     function testEmptyEndpointReverts() public {
         vm.prank(provider);
 
-        vm.expectRevert(
-            ProviderRegistry.InvalidEndpoint.selector
-        );
+        vm.expectRevert(ProviderRegistry.InvalidEndpoint.selector);
 
-        registry.registerProvider(
-            "AI",
-            ""
-        );
+        registry.registerProvider("AI", "");
     }
 
     function testOwnerCanDeactivateProvider() public {
         vm.prank(provider);
 
-        registry.registerProvider(
-            "AI",
-            "https://provider.example"
-        );
+        registry.registerProvider("AI", "https://provider.example");
 
         vm.prank(owner);
 
-        registry.setProviderActive(
-            provider,
-            false
-        );
+        registry.setProviderActive(provider, false);
 
-        assertFalse(
-            registry.isActive(provider)
-        );
+        assertFalse(registry.isActive(provider));
 
-        assertTrue(
-            registry.isRegistered(provider)
-        );
+        assertTrue(registry.isRegistered(provider));
     }
 
     function testUnauthorizedStatusChangeReverts() public {
         vm.prank(provider);
 
-        registry.registerProvider(
-            "AI",
-            "https://provider.example"
-        );
+        registry.registerProvider("AI", "https://provider.example");
 
         vm.prank(attacker);
 
         vm.expectRevert();
 
-        registry.setProviderActive(
-            provider,
-            false
-        );
+        registry.setProviderActive(provider, false);
     }
 }

@@ -27,43 +27,21 @@ contract StakeManager is Ownable, ReentrancyGuard {
     error UnauthorizedLocker();
     error InvalidRecipient();
 
-    event StakeDeposited(
-        address indexed provider,
-        uint256 amount
-    );
+    event StakeDeposited(address indexed provider, uint256 amount);
 
-    event StakeWithdrawn(
-        address indexed provider,
-        uint256 amount
-    );
+    event StakeWithdrawn(address indexed provider, uint256 amount);
 
-    event StakeLocked(
-        address indexed provider,
-        uint256 amount
-    );
+    event StakeLocked(address indexed provider, uint256 amount);
 
-    event StakeUnlocked(
-        address indexed provider,
-        uint256 amount
-    );
+    event StakeUnlocked(address indexed provider, uint256 amount);
 
-    event StakeSlashed(
-        address indexed provider,
-        uint256 amount,
-        address indexed recipient
-    );
+    event StakeSlashed(address indexed provider, uint256 amount, address indexed recipient);
 
-    event LockerAuthorizationUpdated(
-        address indexed locker,
-        bool authorized
-    );
+    event LockerAuthorizationUpdated(address indexed locker, bool authorized);
 
-    constructor(
-        address initialOwner,
-        address stakeToken_,
-        address registry_,
-        uint256 minimumStake_
-    ) Ownable(initialOwner) {
+    constructor(address initialOwner, address stakeToken_, address registry_, uint256 minimumStake_)
+        Ownable(initialOwner)
+    {
         if (stakeToken_ == address(0)) {
             revert InvalidProvider();
         }
@@ -89,25 +67,17 @@ contract StakeManager is Ownable, ReentrancyGuard {
         _;
     }
 
-    function setLockerAuthorization(
-        address locker,
-        bool authorized
-    ) external onlyOwner {
+    function setLockerAuthorization(address locker, bool authorized) external onlyOwner {
         if (locker == address(0)) {
             revert InvalidProvider();
         }
 
         authorizedLockers[locker] = authorized;
 
-        emit LockerAuthorizationUpdated(
-            locker,
-            authorized
-        );
+        emit LockerAuthorizationUpdated(locker, authorized);
     }
 
-    function stake(
-        uint256 amount
-    ) external nonReentrant {
+    function stake(uint256 amount) external nonReentrant {
         if (amount == 0) {
             revert InvalidAmount();
         }
@@ -120,23 +90,14 @@ contract StakeManager is Ownable, ReentrancyGuard {
             revert ProviderNotActive();
         }
 
-        stakeToken.safeTransferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
+        stakeToken.safeTransferFrom(msg.sender, address(this), amount);
 
         stakedBalance[msg.sender] += amount;
 
-        emit StakeDeposited(
-            msg.sender,
-            amount
-        );
+        emit StakeDeposited(msg.sender, amount);
     }
 
-    function withdrawStake(
-        uint256 amount
-    ) external nonReentrant {
+    function withdrawStake(uint256 amount) external nonReentrant {
         if (amount == 0) {
             revert InvalidAmount();
         }
@@ -149,30 +110,18 @@ contract StakeManager is Ownable, ReentrancyGuard {
 
         uint256 remaining = stakedBalance[msg.sender] - amount;
 
-        if (
-            remaining < minimumStake &&
-            remaining != 0
-        ) {
+        if (remaining < minimumStake && remaining != 0) {
             revert InsufficientStake();
         }
 
         stakedBalance[msg.sender] -= amount;
 
-        stakeToken.safeTransfer(
-            msg.sender,
-            amount
-        );
+        stakeToken.safeTransfer(msg.sender, amount);
 
-        emit StakeWithdrawn(
-            msg.sender,
-            amount
-        );
+        emit StakeWithdrawn(msg.sender, amount);
     }
 
-    function lockStake(
-        address provider,
-        uint256 amount
-    ) external onlyAuthorizedLocker {
+    function lockStake(address provider, uint256 amount) external onlyAuthorizedLocker {
         if (provider == address(0)) {
             revert InvalidProvider();
         }
@@ -189,16 +138,10 @@ contract StakeManager is Ownable, ReentrancyGuard {
 
         lockedBalance[provider] += amount;
 
-        emit StakeLocked(
-            provider,
-            amount
-        );
+        emit StakeLocked(provider, amount);
     }
 
-    function unlockStake(
-        address provider,
-        uint256 amount
-    ) external onlyAuthorizedLocker {
+    function unlockStake(address provider, uint256 amount) external onlyAuthorizedLocker {
         if (provider == address(0)) {
             revert InvalidProvider();
         }
@@ -213,17 +156,10 @@ contract StakeManager is Ownable, ReentrancyGuard {
 
         lockedBalance[provider] -= amount;
 
-        emit StakeUnlocked(
-            provider,
-            amount
-        );
+        emit StakeUnlocked(provider, amount);
     }
 
-    function slash(
-        address provider,
-        uint256 amount,
-        address recipient
-    ) external onlyAuthorizedLocker nonReentrant {
+    function slash(address provider, uint256 amount, address recipient) external onlyAuthorizedLocker nonReentrant {
         if (provider == address(0)) {
             revert InvalidProvider();
         }
@@ -244,29 +180,45 @@ contract StakeManager is Ownable, ReentrancyGuard {
 
         stakedBalance[provider] -= amount;
 
-        stakeToken.safeTransfer(
-            recipient,
-            amount
-        );
+        stakeToken.safeTransfer(recipient, amount);
 
-        emit StakeSlashed(
-            provider,
-            amount,
-            recipient
-        );
+        emit StakeSlashed(provider, amount, recipient);
     }
 
-    function availableStake(
-        address provider
-    ) public view returns (uint256) {
-        return
-            stakedBalance[provider] -
-            lockedBalance[provider];
+    function slashLocked(address provider, uint256 amount, address recipient)
+        external
+        onlyAuthorizedLocker
+        nonReentrant
+    {
+        if (provider == address(0)) {
+            revert InvalidProvider();
+        }
+
+        if (recipient == address(0)) {
+            revert InvalidRecipient();
+        }
+
+        if (amount == 0) {
+            revert InvalidAmount();
+        }
+
+        if (amount > lockedBalance[provider]) {
+            revert InsufficientStake();
+        }
+
+        lockedBalance[provider] -= amount;
+        stakedBalance[provider] -= amount;
+
+        stakeToken.safeTransfer(recipient, amount);
+
+        emit StakeSlashed(provider, amount, recipient);
     }
 
-    function isEligible(
-        address provider
-    ) public view returns (bool) {
+    function availableStake(address provider) public view returns (uint256) {
+        return stakedBalance[provider] - lockedBalance[provider];
+    }
+
+    function isEligible(address provider) public view returns (bool) {
         if (!registry.isRegistered(provider)) {
             return false;
         }

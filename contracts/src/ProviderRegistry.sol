@@ -22,29 +22,15 @@ contract ProviderRegistry is Ownable {
     error InvalidEndpoint();
     error UnauthorizedProvider();
 
-    event ProviderRegistered(
-        address indexed provider,
-        string serviceType,
-        string endpoint
-    );
+    event ProviderRegistered(address indexed provider, string serviceType, string endpoint);
 
-    event ProviderStatusUpdated(
-        address indexed provider,
-        bool active
-    );
+    event ProviderStatusUpdated(address indexed provider, bool active);
 
-    event ProviderMetadataUpdated(
-        address indexed provider,
-        string serviceType,
-        string endpoint
-    );
+    event ProviderMetadataUpdated(address indexed provider, string serviceType, string endpoint);
 
     constructor(address initialOwner) Ownable(initialOwner) {}
 
-    function registerProvider(
-        string calldata serviceType,
-        string calldata endpoint
-    ) external {
+    function registerProvider(string calldata serviceType, string calldata endpoint) external {
         if (providers[msg.sender].registered) {
             revert ProviderAlreadyRegistered();
         }
@@ -66,17 +52,10 @@ contract ProviderRegistry is Ownable {
             registeredAt: block.timestamp
         });
 
-        emit ProviderRegistered(
-            msg.sender,
-            serviceType,
-            endpoint
-        );
+        emit ProviderRegistered(msg.sender, serviceType, endpoint);
     }
 
-    function setProviderActive(
-        address provider,
-        bool active
-    ) external onlyOwner {
+    function setProviderActive(address provider, bool active) external onlyOwner {
         if (provider == address(0)) {
             revert InvalidProvider();
         }
@@ -90,10 +69,7 @@ contract ProviderRegistry is Ownable {
         emit ProviderStatusUpdated(provider, active);
     }
 
-    function updateProviderMetadata(
-        string calldata serviceType,
-        string calldata endpoint
-    ) external {
+    function updateProviderMetadata(string calldata serviceType, string calldata endpoint) external {
         Provider storage provider = providers[msg.sender];
 
         if (!provider.registered) {
@@ -111,29 +87,18 @@ contract ProviderRegistry is Ownable {
         provider.serviceType = serviceType;
         provider.endpoint = endpoint;
 
-        emit ProviderMetadataUpdated(
-            msg.sender,
-            serviceType,
-            endpoint
-        );
+        emit ProviderMetadataUpdated(msg.sender, serviceType, endpoint);
     }
 
-    function isRegistered(
-        address provider
-    ) public view returns (bool) {
+    function isRegistered(address provider) public view returns (bool) {
         return providers[provider].registered;
     }
 
-    function isActive(
-        address provider
-    ) public view returns (bool) {
-        return providers[provider].registered &&
-            providers[provider].active;
+    function isActive(address provider) public view returns (bool) {
+        return providers[provider].registered && providers[provider].active;
     }
 
-    function getProvider(
-        address provider
-    ) external view returns (Provider memory) {
+    function getProvider(address provider) external view returns (Provider memory) {
         if (!providers[provider].registered) {
             revert ProviderNotRegistered();
         }

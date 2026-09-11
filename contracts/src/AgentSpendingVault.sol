@@ -8,11 +8,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IStakeManager} from "./interfaces/IStakeManager.sol";
 
-contract AgentSpendingVault is
-    Ownable,
-    ReentrancyGuard,
-    Pausable
-{
+contract AgentSpendingVault is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable usdc;
@@ -34,43 +30,21 @@ contract AgentSpendingVault is
     mapping(address => bool) public approvedProviders;
     mapping(bytes32 => bool) public usedRequestIds;
 
-    event AgentUpdated(
-        address indexed oldAgent,
-        address indexed newAgent
-    );
+    event AgentUpdated(address indexed oldAgent, address indexed newAgent);
 
-    event PolicyUpdated(
-        uint256 maxSpend,
-        uint256 perTxCap,
-        uint256 dailyCap
-    );
+    event PolicyUpdated(uint256 maxSpend, uint256 perTxCap, uint256 dailyCap);
 
-    event ProviderApprovalUpdated(
-        address indexed provider,
-        bool approved
-    );
+    event ProviderApprovalUpdated(address indexed provider, bool approved);
 
-    event FundsDeposited(
-        address indexed from,
-        uint256 amount
-    );
+    event FundsDeposited(address indexed from, uint256 amount);
 
-    event FundsWithdrawn(
-        address indexed to,
-        uint256 amount
-    );
+    event FundsWithdrawn(address indexed to, uint256 amount);
 
-    event PaymentExecuted(
-        bytes32 indexed requestId,
-        address indexed provider,
-        uint256 amount
-    );
+    event PaymentExecuted(bytes32 indexed requestId, address indexed provider, uint256 amount);
 
     event EmergencyPauseUpdated(bool paused);
 
-    event StakeManagerUpdated(
-        address indexed manager
-    );
+    event StakeManagerUpdated(address indexed manager);
 
     error InvalidAgent();
     error InvalidProvider();
@@ -86,11 +60,7 @@ contract AgentSpendingVault is
     error StakeManagerNotConfigured();
     error ProviderNotEligible();
 
-    constructor(
-        address initialOwner,
-        address usdcToken,
-        address initialAgent
-    ) Ownable(initialOwner) {
+    constructor(address initialOwner, address usdcToken, address initialAgent) Ownable(initialOwner) {
         if (usdcToken == address(0)) {
             revert InvalidProvider();
         }
@@ -112,9 +82,7 @@ contract AgentSpendingVault is
         _;
     }
 
-    function setAgent(
-        address newAgent
-    ) external onlyOwner {
+    function setAgent(address newAgent) external onlyOwner {
         if (newAgent == address(0)) {
             revert InvalidAgent();
         }
@@ -123,22 +91,11 @@ contract AgentSpendingVault is
 
         agent = newAgent;
 
-        emit AgentUpdated(
-            oldAgent,
-            newAgent
-        );
+        emit AgentUpdated(oldAgent, newAgent);
     }
 
-    function setPolicy(
-        uint256 maxSpend,
-        uint256 perTxCap,
-        uint256 dailyCap
-    ) external onlyOwner {
-        if (
-            maxSpend == 0 ||
-            perTxCap == 0 ||
-            dailyCap == 0
-        ) {
+    function setPolicy(uint256 maxSpend, uint256 perTxCap, uint256 dailyCap) external onlyOwner {
+        if (maxSpend == 0 || perTxCap == 0 || dailyCap == 0) {
             revert InvalidPolicy();
         }
 
@@ -154,58 +111,32 @@ contract AgentSpendingVault is
             revert InvalidPolicy();
         }
 
-        policy = Policy({
-            maxSpend: maxSpend,
-            perTxCap: perTxCap,
-            dailyCap: dailyCap
-        });
+        policy = Policy({maxSpend: maxSpend, perTxCap: perTxCap, dailyCap: dailyCap});
 
-        emit PolicyUpdated(
-            maxSpend,
-            perTxCap,
-            dailyCap
-        );
+        emit PolicyUpdated(maxSpend, perTxCap, dailyCap);
     }
 
-    function setProviderApproval(
-        address provider,
-        bool approved
-    ) external onlyOwner {
+    function setProviderApproval(address provider, bool approved) external onlyOwner {
         if (provider == address(0)) {
             revert InvalidProvider();
         }
 
         approvedProviders[provider] = approved;
 
-        emit ProviderApprovalUpdated(
-            provider,
-            approved
-        );
+        emit ProviderApprovalUpdated(provider, approved);
     }
 
-    function deposit(
-        uint256 amount
-    ) external onlyOwner nonReentrant {
+    function deposit(uint256 amount) external onlyOwner nonReentrant {
         if (amount == 0) {
             revert InvalidAmount();
         }
 
-        usdc.safeTransferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
 
-        emit FundsDeposited(
-            msg.sender,
-            amount
-        );
+        emit FundsDeposited(msg.sender, amount);
     }
 
-    function withdraw(
-        address to,
-        uint256 amount
-    ) external onlyOwner nonReentrant {
+    function withdraw(address to, uint256 amount) external onlyOwner nonReentrant {
         if (to == address(0)) {
             revert InvalidProvider();
         }
@@ -214,8 +145,7 @@ contract AgentSpendingVault is
             revert InvalidAmount();
         }
 
-        uint256 balance =
-            usdc.balanceOf(address(this));
+        uint256 balance = usdc.balanceOf(address(this));
 
         if (amount > balance) {
             revert InsufficientVaultBalance();
@@ -223,87 +153,64 @@ contract AgentSpendingVault is
 
         usdc.safeTransfer(to, amount);
 
-        emit FundsWithdrawn(
-            to,
-            amount
-        );
+        emit FundsWithdrawn(to, amount);
     }
 
-    function pay(
-    bytes32 requestId,
-    address provider,
-    uint256 amount
-)
-    external
-    onlyAgent
-    whenNotPaused
-    nonReentrant
-{
-    if (requestId == bytes32(0)) {
-        revert InvalidAmount();
+    function pay(bytes32 requestId, address provider, uint256 amount) external onlyAgent whenNotPaused nonReentrant {
+        if (requestId == bytes32(0)) {
+            revert InvalidAmount();
+        }
+
+        if (provider == address(0)) {
+            revert InvalidProvider();
+        }
+
+        if (amount == 0) {
+            revert InvalidAmount();
+        }
+
+        if (usedRequestIds[requestId]) {
+            revert RequestAlreadyUsed();
+        }
+
+        if (address(stakeManager) == address(0)) {
+            revert StakeManagerNotConfigured();
+        }
+        if (!stakeManager.isEligible(provider)) {
+            revert ProviderNotEligible();
+        }
+
+        _resetDailyWindowIfNeeded();
+
+        if (amount > policy.perTxCap) {
+            revert PerTxCapExceeded();
+        }
+
+        if (totalSpent + amount > policy.maxSpend) {
+            revert TotalCapExceeded();
+        }
+
+        if (dailySpent + amount > policy.dailyCap) {
+            revert DailyCapExceeded();
+        }
+
+        uint256 balance = usdc.balanceOf(address(this));
+
+        if (amount > balance) {
+            revert InsufficientVaultBalance();
+        }
+
+        usedRequestIds[requestId] = true;
+
+        totalSpent += amount;
+        dailySpent += amount;
+
+        usdc.safeTransfer(provider, amount);
+
+        emit PaymentExecuted(requestId, provider, amount);
     }
 
-    if (provider == address(0)) {
-        revert InvalidProvider();
-    }
-
-    if (amount == 0) {
-        revert InvalidAmount();
-    }
-
-    if (usedRequestIds[requestId]) {
-        revert RequestAlreadyUsed();
-    }
-
-   if (address(stakeManager) == address(0)) {
-    revert StakeManagerNotConfigured();
-}
-if (!stakeManager.isEligible(provider)) {
-    revert ProviderNotEligible();
-}
-
-    _resetDailyWindowIfNeeded();
-
-    if (amount > policy.perTxCap) {
-        revert PerTxCapExceeded();
-    }
-
-    if (totalSpent + amount > policy.maxSpend) {
-        revert TotalCapExceeded();
-    }
-
-    if (dailySpent + amount > policy.dailyCap) {
-        revert DailyCapExceeded();
-    }
-
-    uint256 balance = usdc.balanceOf(address(this));
-
-    if (amount > balance) {
-        revert InsufficientVaultBalance();
-    }
-
-    usedRequestIds[requestId] = true;
-
-    totalSpent += amount;
-    dailySpent += amount;
-
-    usdc.safeTransfer(
-        provider,
-        amount
-    );
-
-    emit PaymentExecuted(
-        requestId,
-        provider,
-        amount
-    );
-}
-
-    function remainingAllowance()
-        public
-        view
-        returns (uint256)
-    {
+    function remainingAllowance() public view returns (uint256) {
         if (totalSpent >= policy.maxSpend) {
             return 0;
         }
@@ -311,29 +218,18 @@ if (!stakeManager.isEligible(provider)) {
         return policy.maxSpend - totalSpent;
     }
 
-    function remainingDailyAllowance()
-        public
-        view
-        returns (uint256)
-    {
+    function remainingDailyAllowance() public view returns (uint256) {
         uint256 currentDailySpent = dailySpent;
 
-        if (
-            block.timestamp >=
-            dailyWindowStart + 1 days
-        ) {
+        if (block.timestamp >= dailyWindowStart + 1 days) {
             currentDailySpent = 0;
         }
 
-        if (
-            currentDailySpent >= policy.dailyCap
-        ) {
+        if (currentDailySpent >= policy.dailyCap) {
             return 0;
         }
 
-        return
-            policy.dailyCap -
-            currentDailySpent;
+        return policy.dailyCap - currentDailySpent;
     }
 
     function pause() external onlyOwner {
@@ -348,9 +244,7 @@ if (!stakeManager.isEligible(provider)) {
         emit EmergencyPauseUpdated(false);
     }
 
-    function setStakeManager(
-        address manager
-    ) external onlyOwner {
+    function setStakeManager(address manager) external onlyOwner {
         if (manager == address(0)) {
             revert InvalidProvider();
         }
@@ -360,13 +254,8 @@ if (!stakeManager.isEligible(provider)) {
         emit StakeManagerUpdated(manager);
     }
 
-    function _resetDailyWindowIfNeeded()
-        internal
-    {
-        if (
-            block.timestamp >=
-            dailyWindowStart + 1 days
-        ) {
+    function _resetDailyWindowIfNeeded() internal {
+        if (block.timestamp >= dailyWindowStart + 1 days) {
             dailyWindowStart = block.timestamp;
             dailySpent = 0;
         }

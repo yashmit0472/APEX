@@ -14,12 +14,7 @@ contract DeployStakeManager is Script {
 
         vm.startBroadcast(deployerKey);
 
-        manager = new StakeManager(
-            deployer,
-            usdc,
-            registry,
-            10 * 1e6
-        );
+        manager = new StakeManager(deployer, usdc, registry, 10 * 1e6);
 
         vm.stopBroadcast();
     }

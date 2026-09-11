@@ -10,11 +10,7 @@ import {IDeliveryVerifier} from "./interfaces/IDeliveryVerifier.sol";
 import {IProviderRegistry} from "./interfaces/IProviderRegistry.sol";
 import {IStakeManager} from "./interfaces/IStakeManager.sol";
 
-contract PaymentEscrow is
-    IPaymentEscrow,
-    Ownable,
-    ReentrancyGuard
-{
+contract PaymentEscrow is IPaymentEscrow, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable paymentToken;
@@ -75,38 +71,17 @@ contract PaymentEscrow is
         bytes32 serviceId
     );
 
-    event DeliverySubmitted(
-        uint256 indexed jobId,
-        address indexed provider,
-        bytes32 deliveryHash
-    );
+    event DeliverySubmitted(uint256 indexed jobId, address indexed provider, bytes32 deliveryHash);
 
-    event JobSettled(
-        uint256 indexed jobId,
-        address indexed provider,
-        uint256 amount
-    );
+    event JobSettled(uint256 indexed jobId, address indexed provider, uint256 amount);
 
-    event JobRefunded(
-        uint256 indexed jobId,
-        address indexed agent,
-        uint256 amount
-    );
+    event JobRefunded(uint256 indexed jobId, address indexed agent, uint256 amount);
 
-    event ProviderSlashed(
-        uint256 indexed jobId,
-        address indexed provider,
-        uint256 amount
-    );
+    event ProviderSlashed(uint256 indexed jobId, address indexed provider, uint256 amount);
 
-    event CreatorAuthorizationUpdated(
-        address indexed creator,
-        bool authorized
-    );
+    event CreatorAuthorizationUpdated(address indexed creator, bool authorized);
 
-    event TreasuryUpdated(
-        address indexed treasury
-    );
+    event TreasuryUpdated(address indexed treasury);
 
     // ── Modifiers ──
 
@@ -151,32 +126,23 @@ contract PaymentEscrow is
         paymentToken = IERC20(paymentToken_);
         registry = IProviderRegistry(registry_);
         stakeManager = IStakeManager(stakeManager_);
-        deliveryVerifier =
-            IDeliveryVerifier(deliveryVerifier_);
+        deliveryVerifier = IDeliveryVerifier(deliveryVerifier_);
         treasury = treasury_;
     }
 
     // ── Admin ──
 
-    function setCreatorAuthorization(
-        address creator,
-        bool authorized
-    ) external onlyOwner {
+    function setCreatorAuthorization(address creator, bool authorized) external onlyOwner {
         if (creator == address(0)) {
             revert InvalidAddress();
         }
 
         authorizedCreators[creator] = authorized;
 
-        emit CreatorAuthorizationUpdated(
-            creator,
-            authorized
-        );
+        emit CreatorAuthorizationUpdated(creator, authorized);
     }
 
-    function setTreasury(
-        address treasury_
-    ) external onlyOwner {
+    function setTreasury(address treasury_) external onlyOwner {
         if (treasury_ == address(0)) {
             revert InvalidAddress();
         }
@@ -188,13 +154,7 @@ contract PaymentEscrow is
 
     // ── Core Operations ──
 
-    function createJob(
-        address provider,
-        uint256 amount,
-        uint256 stakeRequired,
-        uint256 deadline,
-        bytes32 serviceId
-    )
+    function createJob(address provider, uint256 amount, uint256 stakeRequired, uint256 deadline, bytes32 serviceId)
         external
         onlyAuthorizedCreator
         nonReentrant
@@ -216,35 +176,25 @@ contract PaymentEscrow is
             revert InvalidServiceId();
         }
 
-        // Check 4 — Provider must be active
-        if (!registry.isActive(provider)) {
+        // Provider must satisfy protocol eligibility:
+        // registered + active + minimum stake.
+        if (!stakeManager.isEligible(provider)) {
             revert ProviderNotEligible();
         }
 
-        // Check 5 — Provider must have enough
-        //           available stake for collateral
-        if (
-            stakeRequired > 0 &&
-            stakeManager.availableStake(provider) <
-                stakeRequired
-        ) {
+        // Provider must also have enough AVAILABLE
+        // stake for this job's collateral.
+        if (stakeRequired > 0 && stakeManager.availableStake(provider) < stakeRequired) {
             revert InsufficientProviderStake();
         }
 
         // Lock provider collateral via StakeManager
         if (stakeRequired > 0) {
-            stakeManager.lockStake(
-                provider,
-                stakeRequired
-            );
+            stakeManager.lockStake(provider, stakeRequired);
         }
 
         // Pull payment from the caller (the vault)
-        paymentToken.safeTransferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
+        paymentToken.safeTransferFrom(msg.sender, address(this), amount);
 
         jobId = nextJobId++;
 
@@ -260,21 +210,10 @@ contract PaymentEscrow is
             status: JobStatus.Funded
         });
 
-        emit JobCreated(
-            jobId,
-            msg.sender,
-            provider,
-            amount,
-            stakeRequired,
-            deadline,
-            serviceId
-        );
+        emit JobCreated(jobId, msg.sender, provider, amount, stakeRequired, deadline, serviceId);
     }
 
-    function submitDelivery(
-        uint256 jobId,
-        bytes32 deliveryHash
-    ) external {
+    function submitDelivery(uint256 jobId, bytes32 deliveryHash) external {
         Job storage job = _getJobStorage(jobId);
 
         if (msg.sender != job.provider) {
@@ -285,7 +224,7 @@ contract PaymentEscrow is
             revert JobNotFunded();
         }
 
-        if (block.timestamp > job.deadline) {
+        if (block.timestamp >= job.deadline) {
             revert DeadlineExpired();
         }
 
@@ -296,16 +235,10 @@ contract PaymentEscrow is
         job.deliveryHash = deliveryHash;
         job.status = JobStatus.WorkSubmitted;
 
-        emit DeliverySubmitted(
-            jobId,
-            job.provider,
-            deliveryHash
-        );
+        emit DeliverySubmitted(jobId, job.provider, deliveryHash);
     }
 
-    function settle(
-        uint256 jobId
-    ) external nonReentrant {
+    function settle(uint256 jobId) external nonReentrant {
         Job storage job = _getJobStorage(jobId);
 
         if (job.status != JobStatus.WorkSubmitted) {
@@ -313,10 +246,7 @@ contract PaymentEscrow is
         }
 
         // Verify delivery through the pluggable verifier
-        bool valid = deliveryVerifier.verify(
-            jobId,
-            job.deliveryHash
-        );
+        bool valid = deliveryVerifier.verify(jobId, job.deliveryHash);
 
         if (!valid) {
             revert VerificationFailed();
@@ -326,36 +256,24 @@ contract PaymentEscrow is
         job.status = JobStatus.Settled;
 
         // Pay the provider
-        paymentToken.safeTransfer(
-            job.provider,
-            job.amount
-        );
+        paymentToken.safeTransfer(job.provider, job.amount);
 
         // Unlock provider collateral
         if (job.stakeRequired > 0) {
-            stakeManager.unlockStake(
-                job.provider,
-                job.stakeRequired
-            );
+            stakeManager.unlockStake(job.provider, job.stakeRequired);
         }
 
-        emit JobSettled(
-            jobId,
-            job.provider,
-            job.amount
-        );
+        emit JobSettled(jobId, job.provider, job.amount);
     }
 
-    function refund(
-        uint256 jobId
-    ) external nonReentrant {
+    function refund(uint256 jobId) external nonReentrant {
         Job storage job = _getJobStorage(jobId);
 
         if (job.status != JobStatus.Funded) {
             revert JobNotFunded();
         }
 
-        if (block.timestamp <= job.deadline) {
+        if (block.timestamp < job.deadline) {
             revert DeadlineNotExpired();
         }
 
@@ -363,46 +281,27 @@ contract PaymentEscrow is
         job.status = JobStatus.Refunded;
 
         // Refund payment to the agent
-        paymentToken.safeTransfer(
-            job.agent,
-            job.amount
-        );
+        paymentToken.safeTransfer(job.agent, job.amount);
 
-        // Slash the provider's collateral → treasury
+        // Slash the provider's locked collateral → treasury
         if (job.stakeRequired > 0) {
-            stakeManager.slash(
-                job.provider,
-                job.stakeRequired,
-                treasury
-            );
+            stakeManager.slashLocked(job.provider, job.stakeRequired, treasury);
 
-            emit ProviderSlashed(
-                jobId,
-                job.provider,
-                job.stakeRequired
-            );
+            emit ProviderSlashed(jobId, job.provider, job.stakeRequired);
         }
 
-        emit JobRefunded(
-            jobId,
-            job.agent,
-            job.amount
-        );
+        emit JobRefunded(jobId, job.agent, job.amount);
     }
 
     // ── Views ──
 
-    function getJob(
-        uint256 jobId
-    ) external view returns (Job memory) {
+    function getJob(uint256 jobId) external view returns (Job memory) {
         return jobs[jobId];
     }
 
     // ── Internal ──
 
-    function _getJobStorage(
-        uint256 jobId
-    ) internal view returns (Job storage) {
+    function _getJobStorage(uint256 jobId) internal view returns (Job storage) {
         if (jobId >= nextJobId) {
             revert InvalidJobId();
         }

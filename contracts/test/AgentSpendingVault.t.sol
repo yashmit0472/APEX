@@ -35,213 +35,123 @@ contract AgentSpendingVaultTest is Test {
         // -------------------------------------------------
         // 3. Deploy StakeManager
         // -------------------------------------------------
-        stakeManager = new StakeManager(
-            owner,
-            address(usdc),
-            address(registry),
-            MINIMUM_STAKE
-        );
+        stakeManager = new StakeManager(owner, address(usdc), address(registry), MINIMUM_STAKE);
 
         // -------------------------------------------------
         // 4. Deploy AgentSpendingVault
         // -------------------------------------------------
-        vault = new AgentSpendingVault(
-            owner,
-            address(usdc),
-            agent
-        );
+        vault = new AgentSpendingVault(owner, address(usdc), agent);
 
         // -------------------------------------------------
         // 5. Configure vault policy
         // -------------------------------------------------
         vm.startPrank(owner);
-        vault.setPolicy(
-            100 * USDC,
-            25 * USDC,
-            50 * USDC
-        );
+        vault.setPolicy(100 * USDC, 25 * USDC, 50 * USDC);
 
         // -------------------------------------------------
         // 6. Configure provider approval
         // -------------------------------------------------
-        vault.setProviderApproval(
-            provider,
-            true
-        );
+        vault.setProviderApproval(provider, true);
 
         // -------------------------------------------------
         // 7. Connect StakeManager to vault
         // -------------------------------------------------
-        vault.setStakeManager(
-            address(stakeManager)
-        );
+        vault.setStakeManager(address(stakeManager));
 
         // -------------------------------------------------
         // 8. Fund owner
         // -------------------------------------------------
-        usdc.mint(
-            owner,
-            1_000 * USDC
-        );
+        usdc.mint(owner, 1_000 * USDC);
 
         // -------------------------------------------------
         // 9. Fund provider
         // -------------------------------------------------
-        usdc.mint(
-            provider,
-            100 * USDC
-        );
+        usdc.mint(provider, 100 * USDC);
 
         // -------------------------------------------------
         // 10. Fund vault
         // -------------------------------------------------
-        usdc.approve(
-            address(vault),
-            1_000 * USDC
-        );
-        vault.deposit(
-            100 * USDC
-        );
+        usdc.approve(address(vault), 1_000 * USDC);
+        vault.deposit(100 * USDC);
         vm.stopPrank();
 
         // -------------------------------------------------
         // 11. Register provider
         // -------------------------------------------------
         vm.prank(provider);
-        registry.registerProvider(
-            "GPU_COMPUTE",
-            "https://provider.example"
-        );
+        registry.registerProvider("GPU_COMPUTE", "https://provider.example");
 
         // -------------------------------------------------
         // 12. Provider stakes minimum required amount
         // -------------------------------------------------
         vm.startPrank(provider);
-        usdc.approve(
-            address(stakeManager),
-            MINIMUM_STAKE
-        );
-        stakeManager.stake(
-            MINIMUM_STAKE
-        );
+        usdc.approve(address(stakeManager), MINIMUM_STAKE);
+        stakeManager.stake(MINIMUM_STAKE);
         vm.stopPrank();
     }
 
     function testInitialFunding() public {
-        assertEq(
-            usdc.balanceOf(address(vault)),
-            100 * USDC
-        );
+        assertEq(usdc.balanceOf(address(vault)), 100 * USDC);
     }
 
     function testAgentCanPayApprovedProvider() public {
-        bytes32 requestId =
-            keccak256("request-1");
+        bytes32 requestId = keccak256("request-1");
 
         vm.prank(agent);
 
-        vault.pay(
-            requestId,
-            provider,
-            10 * USDC
-        );
+        vault.pay(requestId, provider, 10 * USDC);
 
-        assertEq(
-            usdc.balanceOf(provider),
-            60 * USDC
-        );
+        assertEq(usdc.balanceOf(provider), 60 * USDC);
 
-        assertEq(
-            vault.totalSpent(),
-            10 * USDC
-        );
+        assertEq(vault.totalSpent(), 10 * USDC);
 
-        assertEq(
-            vault.dailySpent(),
-            10 * USDC
-        );
+        assertEq(vault.dailySpent(), 10 * USDC);
     }
 
     function testUnauthorizedWalletCannotPay() public {
-        bytes32 requestId =
-            keccak256("attack");
+        bytes32 requestId = keccak256("attack");
 
         vm.prank(attacker);
 
-        vm.expectRevert(
-            AgentSpendingVault.UnauthorizedAgent.selector
-        );
+        vm.expectRevert(AgentSpendingVault.UnauthorizedAgent.selector);
 
-        vault.pay(
-            requestId,
-            provider,
-            10 * USDC
-        );
+        vault.pay(requestId, provider, 10 * USDC);
     }
 
     function testIneligibleProviderReverts() public {
-        address unregisteredProvider =
-            address(0xD00D);
+        address unregisteredProvider = address(0xD00D);
 
-        bytes32 requestId =
-            keccak256("unknown-provider");
+        bytes32 requestId = keccak256("unknown-provider");
 
         vm.prank(agent);
 
-        vm.expectRevert(
-            AgentSpendingVault.ProviderNotEligible.selector
-        );
+        vm.expectRevert(AgentSpendingVault.ProviderNotEligible.selector);
 
-        vault.pay(
-            requestId,
-            unregisteredProvider,
-            10 * USDC
-        );
+        vault.pay(requestId, unregisteredProvider, 10 * USDC);
     }
 
     function testPaymentAbovePerTxCapReverts() public {
-        bytes32 requestId =
-            keccak256("per-tx");
+        bytes32 requestId = keccak256("per-tx");
 
         vm.prank(agent);
 
-        vm.expectRevert(
-            AgentSpendingVault.PerTxCapExceeded.selector
-        );
+        vm.expectRevert(AgentSpendingVault.PerTxCapExceeded.selector);
 
-        vault.pay(
-            requestId,
-            provider,
-            26 * USDC
-        );
+        vault.pay(requestId, provider, 26 * USDC);
     }
 
     function testTotalCapReverts() public {
         vm.prank(owner);
 
-        vault.setPolicy(
-            100 * USDC,
-            100 * USDC,
-            100 * USDC
-        );
+        vault.setPolicy(100 * USDC, 100 * USDC, 100 * USDC);
 
         vm.startPrank(agent);
 
-        vault.pay(
-            keccak256("total-1"),
-            provider,
-            60 * USDC
-        );
+        vault.pay(keccak256("total-1"), provider, 60 * USDC);
 
-        vm.expectRevert(
-            AgentSpendingVault.TotalCapExceeded.selector
-        );
+        vm.expectRevert(AgentSpendingVault.TotalCapExceeded.selector);
 
-        vault.pay(
-            keccak256("total-2"),
-            provider,
-            41 * USDC
-        );
+        vault.pay(keccak256("total-2"), provider, 41 * USDC);
 
         vm.stopPrank();
     }
@@ -249,27 +159,13 @@ contract AgentSpendingVaultTest is Test {
     function testDailyCapReverts() public {
         vm.startPrank(agent);
 
-        vault.pay(
-            keccak256("daily-1"),
-            provider,
-            25 * USDC
-        );
+        vault.pay(keccak256("daily-1"), provider, 25 * USDC);
 
-        vault.pay(
-            keccak256("daily-2"),
-            provider,
-            25 * USDC
-        );
+        vault.pay(keccak256("daily-2"), provider, 25 * USDC);
 
-        vm.expectRevert(
-            AgentSpendingVault.DailyCapExceeded.selector
-        );
+        vm.expectRevert(AgentSpendingVault.DailyCapExceeded.selector);
 
-        vault.pay(
-            keccak256("daily-3"),
-            provider,
-            1 * USDC
-        );
+        vault.pay(keccak256("daily-3"), provider, 1 * USDC);
 
         vm.stopPrank();
     }
@@ -277,56 +173,29 @@ contract AgentSpendingVaultTest is Test {
     function testDailyCapResetsAfter24Hours() public {
         vm.startPrank(agent);
 
-        vault.pay(
-            keccak256("daily-reset-1"),
-            provider,
-            25 * USDC
-        );
+        vault.pay(keccak256("daily-reset-1"), provider, 25 * USDC);
 
-        vault.pay(
-            keccak256("daily-reset-2"),
-            provider,
-            25 * USDC
-        );
+        vault.pay(keccak256("daily-reset-2"), provider, 25 * USDC);
 
         vm.stopPrank();
 
-        assertEq(
-            vault.remainingDailyAllowance(),
-            0
-        );
+        assertEq(vault.remainingDailyAllowance(), 0);
 
-        vm.warp(
-            block.timestamp + 1 days
-        );
+        vm.warp(block.timestamp + 1 days);
 
-        assertEq(
-            vault.remainingDailyAllowance(),
-            50 * USDC
-        );
+        assertEq(vault.remainingDailyAllowance(), 50 * USDC);
     }
 
     function testDuplicateRequestIdReverts() public {
-        bytes32 requestId =
-            keccak256("duplicate");
+        bytes32 requestId = keccak256("duplicate");
 
         vm.startPrank(agent);
 
-        vault.pay(
-            requestId,
-            provider,
-            10 * USDC
-        );
+        vault.pay(requestId, provider, 10 * USDC);
 
-        vm.expectRevert(
-            AgentSpendingVault.RequestAlreadyUsed.selector
-        );
+        vm.expectRevert(AgentSpendingVault.RequestAlreadyUsed.selector);
 
-        vault.pay(
-            requestId,
-            provider,
-            10 * USDC
-        );
+        vault.pay(requestId, provider, 10 * USDC);
 
         vm.stopPrank();
     }
@@ -334,65 +203,35 @@ contract AgentSpendingVaultTest is Test {
     function testFrontendBypassCannotOverspend() public {
         vm.prank(owner);
 
-        vault.setPolicy(
-            100 * USDC,
-            100 * USDC,
-            100 * USDC
-        );
+        vault.setPolicy(100 * USDC, 100 * USDC, 100 * USDC);
 
         vm.startPrank(agent);
 
-        vault.pay(
-            keccak256("legitimate-1"),
-            provider,
-            25 * USDC
-        );
+        vault.pay(keccak256("legitimate-1"), provider, 25 * USDC);
 
-        vault.pay(
-            keccak256("legitimate-2"),
-            provider,
-            17 * USDC
-        );
+        vault.pay(keccak256("legitimate-2"), provider, 17 * USDC);
 
         vm.stopPrank();
 
-        assertEq(
-            vault.remainingAllowance(),
-            58 * USDC
-        );
+        assertEq(vault.remainingAllowance(), 58 * USDC);
 
         vm.prank(agent);
 
-        vm.expectRevert(
-            AgentSpendingVault.TotalCapExceeded.selector
-        );
+        vm.expectRevert(AgentSpendingVault.TotalCapExceeded.selector);
 
-        vault.pay(
-            keccak256("malicious-overspend"),
-            provider,
-            70 * USDC
-        );
+        vault.pay(keccak256("malicious-overspend"), provider, 70 * USDC);
     }
 
     function testInsufficientVaultBalanceReverts() public {
         vm.prank(owner);
 
-        vault.withdraw(
-            owner,
-            90 * USDC
-        );
+        vault.withdraw(owner, 90 * USDC);
 
         vm.prank(agent);
 
-        vm.expectRevert(
-            AgentSpendingVault.InsufficientVaultBalance.selector
-        );
+        vm.expectRevert(AgentSpendingVault.InsufficientVaultBalance.selector);
 
-        vault.pay(
-            keccak256("insufficient"),
-            provider,
-            25 * USDC
-        );
+        vault.pay(keccak256("insufficient"), provider, 25 * USDC);
     }
 
     function testAgentCannotChangePolicy() public {
@@ -400,11 +239,7 @@ contract AgentSpendingVaultTest is Test {
 
         vm.expectRevert();
 
-        vault.setPolicy(
-            1_000_000 * USDC,
-            1_000_000 * USDC,
-            1_000_000 * USDC
-        );
+        vault.setPolicy(1_000_000 * USDC, 1_000_000 * USDC, 1_000_000 * USDC);
     }
 
     function testAgentCannotWithdraw() public {
@@ -412,10 +247,7 @@ contract AgentSpendingVaultTest is Test {
 
         vm.expectRevert();
 
-        vault.withdraw(
-            agent,
-            10 * USDC
-        );
+        vault.withdraw(agent, 10 * USDC);
     }
 
     function testPausedVaultRejectsPayment() public {
@@ -427,11 +259,7 @@ contract AgentSpendingVaultTest is Test {
 
         vm.expectRevert();
 
-        vault.pay(
-            keccak256("paused"),
-            provider,
-            10 * USDC
-        );
+        vault.pay(keccak256("paused"), provider, 10 * USDC);
     }
 
     function testUnpauseAllowsPayment() public {
@@ -444,30 +272,17 @@ contract AgentSpendingVaultTest is Test {
 
         vm.prank(agent);
 
-        vault.pay(
-            keccak256("unpaused"),
-            provider,
-            10 * USDC
-        );
+        vault.pay(keccak256("unpaused"), provider, 10 * USDC);
 
-        assertEq(
-            usdc.balanceOf(provider),
-            60 * USDC
-        );
+        assertEq(usdc.balanceOf(provider), 60 * USDC);
     }
 
     function testInvalidPolicyReverts() public {
         vm.startPrank(owner);
 
-        vm.expectRevert(
-            AgentSpendingVault.InvalidPolicy.selector
-        );
+        vm.expectRevert(AgentSpendingVault.InvalidPolicy.selector);
 
-        vault.setPolicy(
-            100 * USDC,
-            101 * USDC,
-            50 * USDC
-        );
+        vault.setPolicy(100 * USDC, 101 * USDC, 50 * USDC);
 
         vm.stopPrank();
     }

@@ -17,11 +17,7 @@ import {IDeliveryVerifier} from "./interfaces/IDeliveryVerifier.sol";
 ///           ZK proof
 ///           Multi-validator consensus
 contract DeliveryVerifier is IDeliveryVerifier {
-
-    function verify(
-        uint256,
-        bytes32 deliveryHash
-    ) external pure returns (bool) {
+    function verify(uint256, bytes32 deliveryHash) external pure returns (bool) {
         return deliveryHash != bytes32(0);
     }
 }

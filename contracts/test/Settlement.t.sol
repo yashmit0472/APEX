@@ -31,161 +31,91 @@ contract SettlementTest is Test {
     uint256 constant JOB_PAYMENT = 25_000_000;
     uint256 constant STAKE_REQUIRED = 10_000_000;
 
-    bytes32 constant SERVICE_ID =
-        keccak256("GPU_COMPUTE");
+    bytes32 constant SERVICE_ID = keccak256("GPU_COMPUTE");
 
-    bytes32 constant DELIVERY_HASH =
-        keccak256("result_v1");
+    bytes32 constant DELIVERY_HASH = keccak256("result_v1");
 
     function setUp() public {
         token = new MockUSDC();
         registry = new ProviderRegistry(owner);
 
-        stakeManager = new StakeManager(
-            owner,
-            address(token),
-            address(registry),
-            MINIMUM_STAKE
-        );
+        stakeManager = new StakeManager(owner, address(token), address(registry), MINIMUM_STAKE);
 
         verifier = new DeliveryVerifier();
 
         escrow = new PaymentEscrow(
-            owner,
-            address(token),
-            address(registry),
-            address(stakeManager),
-            address(verifier),
-            treasury
+            owner, address(token), address(registry), address(stakeManager), address(verifier), treasury
         );
 
         // Wire up
         vm.startPrank(owner);
-        escrow.setCreatorAuthorization(
-            vault,
-            true
-        );
-        stakeManager.setLockerAuthorization(
-            address(escrow),
-            true
-        );
+        escrow.setCreatorAuthorization(vault, true);
+        stakeManager.setLockerAuthorization(address(escrow), true);
         vm.stopPrank();
 
         // Provider setup
         vm.prank(provider);
-        registry.registerProvider(
-            "GPU",
-            "https://gpu.example"
-        );
+        registry.registerProvider("GPU", "https://gpu.example");
 
-        token.mint(
-            provider,
-            1_000 * ONE_USDC
-        );
+        token.mint(provider, 1_000 * ONE_USDC);
 
         vm.prank(provider);
-        token.approve(
-            address(stakeManager),
-            type(uint256).max
-        );
+        token.approve(address(stakeManager), type(uint256).max);
 
         vm.prank(provider);
         stakeManager.stake(100 * ONE_USDC);
 
         // Vault setup (authorized creator)
-        token.mint(
-            vault,
-            1_000 * ONE_USDC
-        );
+        token.mint(vault, 1_000 * ONE_USDC);
 
         vm.prank(vault);
-        token.approve(
-            address(escrow),
-            type(uint256).max
-        );
+        token.approve(address(escrow), type(uint256).max);
     }
 
     // ── Happy Path: Full Settlement ──
 
     function testFullSettlementLifecycle() public {
         // Snapshot balances
-        uint256 vaultBefore =
-            token.balanceOf(vault);
-        uint256 providerBefore =
-            token.balanceOf(provider);
-        uint256 lockedBefore =
-            stakeManager.lockedBalance(provider);
+        uint256 vaultBefore = token.balanceOf(vault);
+        uint256 providerBefore = token.balanceOf(provider);
+        uint256 lockedBefore = stakeManager.lockedBalance(provider);
 
         // 1. Vault creates a job
         vm.prank(vault);
-        uint256 jobId = escrow.createJob(
-            provider,
-            JOB_PAYMENT,
-            STAKE_REQUIRED,
-            block.timestamp + 2 hours,
-            SERVICE_ID
-        );
+        uint256 jobId = escrow.createJob(provider, JOB_PAYMENT, STAKE_REQUIRED, block.timestamp + 2 hours, SERVICE_ID);
 
         // Vault paid, provider stake locked
-        assertEq(
-            token.balanceOf(vault),
-            vaultBefore - JOB_PAYMENT
-        );
-        assertEq(
-            stakeManager.lockedBalance(provider),
-            lockedBefore + STAKE_REQUIRED
-        );
+        assertEq(token.balanceOf(vault), vaultBefore - JOB_PAYMENT);
+        assertEq(stakeManager.lockedBalance(provider), lockedBefore + STAKE_REQUIRED);
 
         // 2. Provider submits delivery
         vm.prank(provider);
-        escrow.submitDelivery(
-            jobId,
-            DELIVERY_HASH
-        );
+        escrow.submitDelivery(jobId, DELIVERY_HASH);
 
         // 3. Settlement (MVP verifier auto-passes)
         escrow.settle(jobId);
 
         // Provider received payment
-        assertEq(
-            token.balanceOf(provider),
-            providerBefore + JOB_PAYMENT
-        );
+        assertEq(token.balanceOf(provider), providerBefore + JOB_PAYMENT);
 
         // Provider stake unlocked
-        assertEq(
-            stakeManager.lockedBalance(provider),
-            lockedBefore
-        );
+        assertEq(stakeManager.lockedBalance(provider), lockedBefore);
 
         // Job is settled
-        IPaymentEscrow.Job memory job =
-            escrow.getJob(jobId);
-        assertEq(
-            uint8(job.status),
-            uint8(IPaymentEscrow.JobStatus.Settled)
-        );
+        IPaymentEscrow.Job memory job = escrow.getJob(jobId);
+        assertEq(uint8(job.status), uint8(IPaymentEscrow.JobStatus.Settled));
     }
 
     // ── Failure Path: Timeout → Refund + Slash ──
 
     function testTimeoutRefundAndSlash() public {
-        uint256 vaultBefore =
-            token.balanceOf(vault);
-        uint256 stakedBefore =
-            stakeManager.stakedBalance(provider);
-        uint256 treasuryBefore =
-            token.balanceOf(treasury);
+        uint256 vaultBefore = token.balanceOf(vault);
+        uint256 stakedBefore = stakeManager.stakedBalance(provider);
+        uint256 treasuryBefore = token.balanceOf(treasury);
 
         // 1. Vault creates a job
         vm.prank(vault);
-        uint256 jobId = escrow.createJob(
-            provider,
-            JOB_PAYMENT,
-            STAKE_REQUIRED,
-            block.timestamp + 2 hours,
-            SERVICE_ID
-        );
+        uint256 jobId = escrow.createJob(provider, JOB_PAYMENT, STAKE_REQUIRED, block.timestamp + 2 hours, SERVICE_ID);
 
         // 2. Deadline expires with no delivery
         vm.warp(block.timestamp + 3 hours);
@@ -194,30 +124,17 @@ contract SettlementTest is Test {
         escrow.refund(jobId);
 
         // Job is REFUNDED
-        IPaymentEscrow.Job memory job =
-            escrow.getJob(jobId);
-        assertEq(
-            uint8(job.status),
-            uint8(IPaymentEscrow.JobStatus.Refunded)
-        );
+        IPaymentEscrow.Job memory job = escrow.getJob(jobId);
+        assertEq(uint8(job.status), uint8(IPaymentEscrow.JobStatus.Refunded));
 
         // Agent gets payment back
-        assertEq(
-            token.balanceOf(vault),
-            vaultBefore
-        );
+        assertEq(token.balanceOf(vault), vaultBefore);
 
         // Provider stake is SLASHED
-        assertEq(
-            stakeManager.stakedBalance(provider),
-            stakedBefore - STAKE_REQUIRED
-        );
+        assertEq(stakeManager.stakedBalance(provider), stakedBefore - STAKE_REQUIRED);
 
         // Treasury receives slashed collateral
-        assertEq(
-            token.balanceOf(treasury),
-            treasuryBefore + STAKE_REQUIRED
-        );
+        assertEq(token.balanceOf(treasury), treasuryBefore + STAKE_REQUIRED);
     }
 
     // ── Economic Verification ──
@@ -232,40 +149,21 @@ contract SettlementTest is Test {
         token.mint(freshVault, 100 * ONE_USDC);
 
         vm.prank(freshVault);
-        token.approve(
-            address(escrow),
-            type(uint256).max
-        );
+        token.approve(address(escrow), type(uint256).max);
 
         vm.prank(owner);
-        escrow.setCreatorAuthorization(
-            freshVault,
-            true
-        );
+        escrow.setCreatorAuthorization(freshVault, true);
 
-        uint256 treasuryBefore =
-            token.balanceOf(treasury);
+        uint256 treasuryBefore = token.balanceOf(treasury);
 
         // Create job: 25 USDC payment, 10 USDC collateral
         vm.prank(freshVault);
-        uint256 jobId = escrow.createJob(
-            provider,
-            25 * ONE_USDC,
-            10 * ONE_USDC,
-            block.timestamp + 2 hours,
-            SERVICE_ID
-        );
+        uint256 jobId = escrow.createJob(provider, 25 * ONE_USDC, 10 * ONE_USDC, block.timestamp + 2 hours, SERVICE_ID);
 
         // After creation:
         // Agent: 75, Escrow: 25, Provider: 100 staked (10 locked)
-        assertEq(
-            token.balanceOf(freshVault),
-            75 * ONE_USDC
-        );
-        assertEq(
-            token.balanceOf(address(escrow)),
-            25 * ONE_USDC
-        );
+        assertEq(token.balanceOf(freshVault), 75 * ONE_USDC);
+        assertEq(token.balanceOf(address(escrow)), 25 * ONE_USDC);
 
         // Provider fails → refund
         vm.warp(block.timestamp + 3 hours);
@@ -273,22 +171,10 @@ contract SettlementTest is Test {
 
         // After refund:
         // Agent: 100, Escrow: 0, Provider: 90 staked, Treasury: +10
-        assertEq(
-            token.balanceOf(freshVault),
-            100 * ONE_USDC
-        );
-        assertEq(
-            token.balanceOf(address(escrow)),
-            0
-        );
-        assertEq(
-            stakeManager.stakedBalance(provider),
-            90 * ONE_USDC
-        );
-        assertEq(
-            token.balanceOf(treasury),
-            treasuryBefore + 10 * ONE_USDC
-        );
+        assertEq(token.balanceOf(freshVault), 100 * ONE_USDC);
+        assertEq(token.balanceOf(address(escrow)), 0);
+        assertEq(stakeManager.stakedBalance(provider), 90 * ONE_USDC);
+        assertEq(token.balanceOf(treasury), treasuryBefore + 10 * ONE_USDC);
     }
 
     // ── No Stake Required: Zero Collateral Job ──
@@ -304,44 +190,26 @@ contract SettlementTest is Test {
         );
 
         vm.prank(provider);
-        escrow.submitDelivery(
-            jobId,
-            DELIVERY_HASH
-        );
+        escrow.submitDelivery(jobId, DELIVERY_HASH);
 
         escrow.settle(jobId);
 
-        IPaymentEscrow.Job memory job =
-            escrow.getJob(jobId);
-        assertEq(
-            uint8(job.status),
-            uint8(IPaymentEscrow.JobStatus.Settled)
-        );
+        IPaymentEscrow.Job memory job = escrow.getJob(jobId);
+        assertEq(uint8(job.status), uint8(IPaymentEscrow.JobStatus.Settled));
     }
 
     // ── Cannot Settle Twice ──
 
     function testCannotSettleTwice() public {
         vm.prank(vault);
-        uint256 jobId = escrow.createJob(
-            provider,
-            JOB_PAYMENT,
-            STAKE_REQUIRED,
-            block.timestamp + 2 hours,
-            SERVICE_ID
-        );
+        uint256 jobId = escrow.createJob(provider, JOB_PAYMENT, STAKE_REQUIRED, block.timestamp + 2 hours, SERVICE_ID);
 
         vm.prank(provider);
-        escrow.submitDelivery(
-            jobId,
-            DELIVERY_HASH
-        );
+        escrow.submitDelivery(jobId, DELIVERY_HASH);
 
         escrow.settle(jobId);
 
-        vm.expectRevert(
-            PaymentEscrow.JobNotWorkSubmitted.selector
-        );
+        vm.expectRevert(PaymentEscrow.JobNotWorkSubmitted.selector);
         escrow.settle(jobId);
     }
 
@@ -349,56 +217,32 @@ contract SettlementTest is Test {
 
     function testCannotRefundAfterSettle() public {
         vm.prank(vault);
-        uint256 jobId = escrow.createJob(
-            provider,
-            JOB_PAYMENT,
-            STAKE_REQUIRED,
-            block.timestamp + 2 hours,
-            SERVICE_ID
-        );
+        uint256 jobId = escrow.createJob(provider, JOB_PAYMENT, STAKE_REQUIRED, block.timestamp + 2 hours, SERVICE_ID);
 
         vm.prank(provider);
-        escrow.submitDelivery(
-            jobId,
-            DELIVERY_HASH
-        );
+        escrow.submitDelivery(jobId, DELIVERY_HASH);
 
         escrow.settle(jobId);
 
         vm.warp(block.timestamp + 3 hours);
 
-        vm.expectRevert(
-            PaymentEscrow.JobNotFunded.selector
-        );
+        vm.expectRevert(PaymentEscrow.JobNotFunded.selector);
         escrow.refund(jobId);
     }
 
     // ── Unauthorized Creator Cannot Bypass ──
 
-    function testUnauthorizedCannotCreateJob()
-        public
-    {
+    function testUnauthorizedCannotCreateJob() public {
         address rando = address(42);
 
         token.mint(rando, 100 * ONE_USDC);
 
         vm.prank(rando);
-        token.approve(
-            address(escrow),
-            type(uint256).max
-        );
+        token.approve(address(escrow), type(uint256).max);
 
         vm.prank(rando);
-        vm.expectRevert(
-            PaymentEscrow.UnauthorizedCreator.selector
-        );
+        vm.expectRevert(PaymentEscrow.UnauthorizedCreator.selector);
 
-        escrow.createJob(
-            provider,
-            JOB_PAYMENT,
-            STAKE_REQUIRED,
-            block.timestamp + 2 hours,
-            SERVICE_ID
-        );
+        escrow.createJob(provider, JOB_PAYMENT, STAKE_REQUIRED, block.timestamp + 2 hours, SERVICE_ID);
     }
 }

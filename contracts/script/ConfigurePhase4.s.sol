@@ -12,44 +12,26 @@ import {StakeManager} from "../src/StakeManager.sol";
 ///         locker on StakeManager.
 contract ConfigurePhase4 is Script {
     function run() external {
-        address escrowAddr =
-            vm.envAddress("PAYMENT_ESCROW_ADDRESS");
-        address stakeManagerAddr =
-            vm.envAddress("STAKE_MANAGER_ADDRESS");
-        address vaultAddr =
-            vm.envAddress("AGENT_VAULT_ADDRESS");
+        address escrowAddr = vm.envAddress("PAYMENT_ESCROW_ADDRESS");
+        address stakeManagerAddr = vm.envAddress("STAKE_MANAGER_ADDRESS");
+        address vaultAddr = vm.envAddress("AGENT_VAULT_ADDRESS");
 
-        uint256 deployerKey =
-            vm.envUint("DEPLOYER_PRIVATE_KEY");
+        uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
 
-        PaymentEscrow escrow =
-            PaymentEscrow(escrowAddr);
-        StakeManager manager =
-            StakeManager(stakeManagerAddr);
+        PaymentEscrow escrow = PaymentEscrow(escrowAddr);
+        StakeManager manager = StakeManager(stakeManagerAddr);
 
         vm.startBroadcast(deployerKey);
 
         // Authorize vault as a job creator
-        escrow.setCreatorAuthorization(
-            vaultAddr,
-            true
-        );
+        escrow.setCreatorAuthorization(vaultAddr, true);
 
-        console.log(
-            "Vault authorized as creator:",
-            vaultAddr
-        );
+        console.log("Vault authorized as creator:", vaultAddr);
 
         // Authorize escrow as a locker on StakeManager
-        manager.setLockerAuthorization(
-            escrowAddr,
-            true
-        );
+        manager.setLockerAuthorization(escrowAddr, true);
 
-        console.log(
-            "Escrow authorized as locker:",
-            escrowAddr
-        );
+        console.log("Escrow authorized as locker:", escrowAddr);
 
         vm.stopBroadcast();
     }

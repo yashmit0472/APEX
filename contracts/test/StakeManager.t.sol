@@ -25,33 +25,19 @@ contract StakeManagerTest is Test {
 
         registry = new ProviderRegistry(owner);
 
-        stakeManager = new StakeManager(
-            owner,
-            address(token),
-            address(registry),
-            MINIMUM_STAKE
-        );
+        stakeManager = new StakeManager(owner, address(token), address(registry), MINIMUM_STAKE);
 
-        token.mint(
-            provider,
-            1_000 * ONE_USDC
-        );
+        token.mint(provider, 1_000 * ONE_USDC);
 
         vm.prank(provider);
 
-        token.approve(
-            address(stakeManager),
-            type(uint256).max
-        );
+        token.approve(address(stakeManager), type(uint256).max);
     }
 
     function registerProvider() internal {
         vm.prank(provider);
 
-        registry.registerProvider(
-            "AI",
-            "https://provider.example"
-        );
+        registry.registerProvider("AI", "https://provider.example");
     }
 
     function stakeAmount(uint256 amount) internal {
@@ -65,98 +51,59 @@ contract StakeManagerTest is Test {
     function testProviderCanStake() public {
         stakeAmount(10 * ONE_USDC);
 
-        assertEq(
-            stakeManager.stakedBalance(provider),
-            10 * ONE_USDC
-        );
+        assertEq(stakeManager.stakedBalance(provider), 10 * ONE_USDC);
     }
 
-    function testEligibilityBeforeAndAfterMinimumStake()
-        public
-    {
+    function testEligibilityBeforeAndAfterMinimumStake() public {
         registerProvider();
 
-        assertFalse(
-            stakeManager.isEligible(provider)
-        );
+        assertFalse(stakeManager.isEligible(provider));
 
         vm.prank(provider);
 
-        stakeManager.stake(
-            10 * ONE_USDC
-        );
+        stakeManager.stake(10 * ONE_USDC);
 
-        assertTrue(
-            stakeManager.isEligible(provider)
-        );
+        assertTrue(stakeManager.isEligible(provider));
     }
 
-    function testUnregisteredProviderCannotStake()
-        public
-    {
+    function testUnregisteredProviderCannotStake() public {
         vm.prank(attacker);
 
-        token.approve(
-            address(stakeManager),
-            type(uint256).max
-        );
+        token.approve(address(stakeManager), type(uint256).max);
 
         vm.prank(attacker);
 
-        vm.expectRevert(
-            StakeManager.ProviderNotRegistered.selector
-        );
+        vm.expectRevert(StakeManager.ProviderNotRegistered.selector);
 
-        stakeManager.stake(
-            10 * ONE_USDC
-        );
+        stakeManager.stake(10 * ONE_USDC);
     }
 
-    function testBelowMinimumStakeIsNotEligible()
-        public
-    {
+    function testBelowMinimumStakeIsNotEligible() public {
         stakeAmount(9 * ONE_USDC);
 
-        assertFalse(
-            stakeManager.isEligible(provider)
-        );
+        assertFalse(stakeManager.isEligible(provider));
     }
 
     function testFullEligiblePath() public {
         stakeAmount(10 * ONE_USDC);
 
-        assertTrue(
-            registry.isRegistered(provider)
-        );
+        assertTrue(registry.isRegistered(provider));
 
-        assertTrue(
-            registry.isActive(provider)
-        );
+        assertTrue(registry.isActive(provider));
 
-        assertTrue(
-            stakeManager.isEligible(provider)
-        );
+        assertTrue(stakeManager.isEligible(provider));
     }
 
-    function testInactiveProviderBecomesIneligible()
-        public
-    {
+    function testInactiveProviderBecomesIneligible() public {
         stakeAmount(10 * ONE_USDC);
 
-        assertTrue(
-            stakeManager.isEligible(provider)
-        );
+        assertTrue(stakeManager.isEligible(provider));
 
         vm.prank(owner);
 
-        registry.setProviderActive(
-            provider,
-            false
-        );
+        registry.setProviderActive(provider, false);
 
-        assertFalse(
-            stakeManager.isEligible(provider)
-        );
+        assertFalse(stakeManager.isEligible(provider));
     }
 
     function testWithdrawStake() public {
@@ -164,64 +111,39 @@ contract StakeManagerTest is Test {
 
         vm.prank(provider);
 
-        stakeManager.withdrawStake(
-            10 * ONE_USDC
-        );
+        stakeManager.withdrawStake(10 * ONE_USDC);
 
-        assertEq(
-            stakeManager.stakedBalance(provider),
-            10 * ONE_USDC
-        );
+        assertEq(stakeManager.stakedBalance(provider), 10 * ONE_USDC);
 
-        assertTrue(
-            stakeManager.isEligible(provider)
-        );
+        assertTrue(stakeManager.isEligible(provider));
     }
 
-    function testCannotWithdrawBelowMinimum()
-        public
-    {
+    function testCannotWithdrawBelowMinimum() public {
         stakeAmount(20 * ONE_USDC);
 
         vm.prank(provider);
 
-        vm.expectRevert(
-            StakeManager.InsufficientStake.selector
-        );
+        vm.expectRevert(StakeManager.InsufficientStake.selector);
 
-        stakeManager.withdrawStake(
-            11 * ONE_USDC
-        );
+        stakeManager.withdrawStake(11 * ONE_USDC);
     }
 
-    function testLockedStakeCannotBeWithdrawn()
-        public
-    {
+    function testLockedStakeCannotBeWithdrawn() public {
         stakeAmount(100 * ONE_USDC);
 
         vm.prank(owner);
 
-        stakeManager.setLockerAuthorization(
-            locker,
-            true
-        );
+        stakeManager.setLockerAuthorization(locker, true);
 
         vm.prank(locker);
 
-        stakeManager.lockStake(
-            provider,
-            40 * ONE_USDC
-        );
+        stakeManager.lockStake(provider, 40 * ONE_USDC);
 
         vm.prank(provider);
 
-        vm.expectRevert(
-            StakeManager.InsufficientAvailableStake.selector
-        );
+        vm.expectRevert(StakeManager.InsufficientAvailableStake.selector);
 
-        stakeManager.withdrawStake(
-            61 * ONE_USDC
-        );
+        stakeManager.withdrawStake(61 * ONE_USDC);
     }
 
     function testLockingStake() public {
@@ -229,27 +151,15 @@ contract StakeManagerTest is Test {
 
         vm.prank(owner);
 
-        stakeManager.setLockerAuthorization(
-            locker,
-            true
-        );
+        stakeManager.setLockerAuthorization(locker, true);
 
         vm.prank(locker);
 
-        stakeManager.lockStake(
-            provider,
-            30 * ONE_USDC
-        );
+        stakeManager.lockStake(provider, 30 * ONE_USDC);
 
-        assertEq(
-            stakeManager.lockedBalance(provider),
-            30 * ONE_USDC
-        );
+        assertEq(stakeManager.lockedBalance(provider), 30 * ONE_USDC);
 
-        assertEq(
-            stakeManager.availableStake(provider),
-            70 * ONE_USDC
-        );
+        assertEq(stakeManager.availableStake(provider), 70 * ONE_USDC);
     }
 
     function testUnlockStake() public {
@@ -257,51 +167,29 @@ contract StakeManagerTest is Test {
 
         vm.prank(owner);
 
-        stakeManager.setLockerAuthorization(
-            locker,
-            true
-        );
+        stakeManager.setLockerAuthorization(locker, true);
 
         vm.startPrank(locker);
 
-        stakeManager.lockStake(
-            provider,
-            30 * ONE_USDC
-        );
+        stakeManager.lockStake(provider, 30 * ONE_USDC);
 
-        stakeManager.unlockStake(
-            provider,
-            30 * ONE_USDC
-        );
+        stakeManager.unlockStake(provider, 30 * ONE_USDC);
 
         vm.stopPrank();
 
-        assertEq(
-            stakeManager.lockedBalance(provider),
-            0
-        );
+        assertEq(stakeManager.lockedBalance(provider), 0);
 
-        assertEq(
-            stakeManager.availableStake(provider),
-            100 * ONE_USDC
-        );
+        assertEq(stakeManager.availableStake(provider), 100 * ONE_USDC);
     }
 
-    function testUnauthorizedLockReverts()
-        public
-    {
+    function testUnauthorizedLockReverts() public {
         stakeAmount(100 * ONE_USDC);
 
         vm.prank(attacker);
 
-        vm.expectRevert(
-            StakeManager.UnauthorizedLocker.selector
-        );
+        vm.expectRevert(StakeManager.UnauthorizedLocker.selector);
 
-        stakeManager.lockStake(
-            provider,
-            30 * ONE_USDC
-        );
+        stakeManager.lockStake(provider, 30 * ONE_USDC);
     }
 
     function testSlash() public {
@@ -309,49 +197,68 @@ contract StakeManagerTest is Test {
 
         vm.prank(owner);
 
-        stakeManager.setLockerAuthorization(
-            locker,
-            true
-        );
+        stakeManager.setLockerAuthorization(locker, true);
 
-        uint256 treasuryBefore =
-            token.balanceOf(treasury);
+        uint256 treasuryBefore = token.balanceOf(treasury);
 
         vm.prank(locker);
 
-        stakeManager.slash(
-            provider,
-            10 * ONE_USDC,
-            treasury
-        );
+        stakeManager.slash(provider, 10 * ONE_USDC, treasury);
 
-        assertEq(
-            stakeManager.stakedBalance(provider),
-            90 * ONE_USDC
-        );
+        assertEq(stakeManager.stakedBalance(provider), 90 * ONE_USDC);
 
-        assertEq(
-            token.balanceOf(treasury),
-            treasuryBefore +
-            10 * ONE_USDC
-        );
+        assertEq(token.balanceOf(treasury), treasuryBefore + 10 * ONE_USDC);
     }
 
-    function testUnauthorizedSlashReverts()
-        public
-    {
+    function testUnauthorizedSlashReverts() public {
         stakeAmount(100 * ONE_USDC);
 
         vm.prank(attacker);
 
-        vm.expectRevert(
-            StakeManager.UnauthorizedLocker.selector
-        );
+        vm.expectRevert(StakeManager.UnauthorizedLocker.selector);
 
-        stakeManager.slash(
-            provider,
-            10 * ONE_USDC,
-            treasury
-        );
+        stakeManager.slash(provider, 10 * ONE_USDC, treasury);
+    }
+
+    function testSlashLockedCollateral() public {
+        uint256 totalStake = 100 * ONE_USDC;
+        uint256 lockedAmount = 10 * ONE_USDC;
+
+        // Provider registers and stakes
+        stakeAmount(totalStake);
+
+        // Authorize locker
+        vm.prank(owner);
+
+        stakeManager.setLockerAuthorization(locker, true);
+
+        vm.startPrank(locker);
+
+        // Lock collateral
+        stakeManager.lockStake(provider, lockedAmount);
+
+        uint256 treasuryBefore = token.balanceOf(treasury);
+
+        stakeManager.slashLocked(provider, lockedAmount, treasury);
+
+        vm.stopPrank();
+
+        assertEq(stakeManager.stakedBalance(provider), totalStake - lockedAmount);
+
+        assertEq(stakeManager.lockedBalance(provider), 0);
+
+        assertEq(stakeManager.availableStake(provider), totalStake - lockedAmount);
+
+        assertEq(token.balanceOf(treasury), treasuryBefore + lockedAmount);
+    }
+
+    function testUnauthorizedSlashLockedReverts() public {
+        stakeAmount(100 * ONE_USDC);
+
+        vm.prank(attacker);
+
+        vm.expectRevert(StakeManager.UnauthorizedLocker.selector);
+
+        stakeManager.slashLocked(provider, 1 * ONE_USDC, treasury);
     }
 }
