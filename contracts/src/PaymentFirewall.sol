@@ -140,6 +140,10 @@ contract PaymentFirewall is IPaymentFirewall, Ownable {
         external
         returns (uint256 score, Decision decision)
     {
+        if (!authorizedRecorders[msg.sender]) {
+            revert UnauthorizedRecorder();
+        }
+
         if (agent == address(0)) {
             revert InvalidAddress();
         }

@@ -62,6 +62,9 @@ contract PaymentFirewallTest is Test {
 
         vm.prank(owner);
         firewall.setPolicy(40, 70, 90, 100, 0, 0, 0, 1 days, 10);
+
+        vm.prank(owner);
+        firewall.setRecorderAuthorization(address(this), true);
     }
 
     function testLowRiskRequestAutoPaysWithoutPendingState() public {
@@ -72,6 +75,12 @@ contract PaymentFirewallTest is Test {
         assertEq(score, 10);
         assertEq(uint256(decision), uint256(IPaymentFirewall.Decision.AUTO_PAY));
         assertEq(uint256(firewall.getPendingRequest(requestId).status), uint256(IPaymentFirewall.PendingStatus.None));
+    }
+
+    function testEvaluateRevertsForUnauthorizedCaller() public {
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(PaymentFirewall.UnauthorizedRecorder.selector));
+        firewall.evaluate(agent, provider, 10, keccak256("unauthorized-evaluate"));
     }
 
     function testMediumRiskRequestFlagsAndStillProceeds() public {
