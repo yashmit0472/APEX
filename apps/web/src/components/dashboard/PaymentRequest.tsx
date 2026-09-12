@@ -57,7 +57,15 @@ function decisionClass(
   }
 }
 
-export function PaymentRequest() {
+export function PaymentRequest({
+  onFirewallDecision,
+}: {
+  onFirewallDecision?: (result: {
+    requestId: Hex;
+    score: bigint;
+    decision: FirewallDecision;
+  }) => void;
+}) {
   const { address, isConnected } =
     useAccount();
 
@@ -132,6 +140,12 @@ export function PaymentRequest() {
         setDecision(result.decision);
         setRequestId(result.requestId);
 
+        onFirewallDecision?.({
+          requestId: result.requestId,
+          score: result.score,
+          decision: result.decision,
+        });
+
         setPaymentState("confirmed");
       } catch (err) {
         console.error(
@@ -150,6 +164,7 @@ export function PaymentRequest() {
     hash,
     isConfirmed,
     getFirewallResult,
+    onFirewallDecision,
   ]);
 
   function resetPayment() {
@@ -271,7 +286,6 @@ export function PaymentRequest() {
 
   return (
     <section className="payment-card">
-
       <div className="payment-card-header">
         <div>
           <p className="section-kicker">
@@ -294,7 +308,6 @@ export function PaymentRequest() {
       </div>
 
       <div className="payment-form">
-
         <div className="form-field">
           <label>
             Provider Address
@@ -390,7 +403,6 @@ export function PaymentRequest() {
       )}
 
       <div className="payment-actions">
-
         <button
           className="primary-payment-button"
           onClick={submitPayment}
@@ -421,154 +433,149 @@ export function PaymentRequest() {
         hash ||
         approvalHash ||
         decision) && (
-
-        <div className="payment-status-panel">
-
-          <div className="status-row">
-            <span>
-              Status
-            </span>
-
-            <strong>
-              {paymentState ===
-                "submitting" &&
-                "SUBMITTING"}
-
-              {paymentState ===
-                "confirming" &&
-                "CONFIRMING"}
-
-              {paymentState ===
-                "confirmed" &&
-                "CONFIRMED"}
-
-              {paymentState ===
-                "failed" &&
-                "FAILED"}
-
-              {paymentState ===
-                "idle" &&
-                "READY"}
-            </strong>
-          </div>
-
-          {requestId && (
+          <div className="payment-status-panel">
             <div className="status-row">
               <span>
-                Request ID
-              </span>
-
-              <code>
-                {requestId.slice(0, 14)}
-                ...
-                {requestId.slice(-8)}
-              </code>
-            </div>
-          )}
-
-          {hash && (
-            <div className="status-row">
-              <span>
-                Transaction
-              </span>
-
-              <code>
-                {hash.slice(0, 14)}
-                ...
-                {hash.slice(-8)}
-              </code>
-            </div>
-          )}
-
-          {score !== null && (
-            <div className="status-row">
-              <span>
-                Risk Score
+                Status
               </span>
 
               <strong>
-                {score.toString()}
+                {paymentState ===
+                  "submitting" &&
+                  "SUBMITTING"}
+
+                {paymentState ===
+                  "confirming" &&
+                  "CONFIRMING"}
+
+                {paymentState ===
+                  "confirmed" &&
+                  "CONFIRMED"}
+
+                {paymentState ===
+                  "failed" &&
+                  "FAILED"}
+
+                {paymentState ===
+                  "idle" &&
+                  "READY"}
               </strong>
             </div>
-          )}
 
-          {decision && (
-            <div className="status-row">
-              <span>
-                Firewall Decision
-              </span>
+            {requestId && (
+              <div className="status-row">
+                <span>
+                  Request ID
+                </span>
 
-              <strong
-                className={decisionClass(
-                  decision
-                )}
-              >
-                {decisionLabel(
-                  decision
-                )}
-              </strong>
-            </div>
-          )}
-
-          {decision ===
-            "REQUIRE_APPROVAL" && (
-            <div className="approval-panel">
-
-              <div>
-                <strong>
-                  Manual approval required
-                </strong>
-
-                <p>
-                  The firewall has placed
-                  this payment in review.
-                </p>
+                <code>
+                  {requestId.slice(0, 14)}
+                  ...
+                  {requestId.slice(-8)}
+                </code>
               </div>
+            )}
 
-              <button
-                className="approve-button"
-                onClick={
-                  approvePayment
-                }
-                disabled={
-                  approvalPending
-                }
-              >
-                {approvalPending
-                  ? "Confirm in Wallet..."
-                  : "Approve Payment"}
-              </button>
+            {hash && (
+              <div className="status-row">
+                <span>
+                  Transaction
+                </span>
 
-            </div>
-          )}
+                <code>
+                  {hash.slice(0, 14)}
+                  ...
+                  {hash.slice(-8)}
+                </code>
+              </div>
+            )}
 
-          {decision ===
-            "BLOCK" && (
-            <div className="payment-error">
-              This payment was blocked by
-              the APEX firewall.
-            </div>
-          )}
+            {score !== null && (
+              <div className="status-row">
+                <span>
+                  Risk Score
+                </span>
 
-          {approvalHash && (
-            <div className="status-row">
-              <span>
-                Approval TX
-              </span>
+                <strong>
+                  {score.toString()}
+                </strong>
+              </div>
+            )}
 
-              <code>
-                {approvalHash.slice(
-                  0,
-                  14
-                )}
-                ...
-                {approvalHash.slice(-8)}
-              </code>
-            </div>
-          )}
+            {decision && (
+              <div className="status-row">
+                <span>
+                  Firewall Decision
+                </span>
 
-        </div>
-      )}
+                <strong
+                  className={decisionClass(
+                    decision
+                  )}
+                >
+                  {decisionLabel(
+                    decision
+                  )}
+                </strong>
+              </div>
+            )}
+
+            {decision ===
+              "REQUIRE_APPROVAL" && (
+                <div className="approval-panel">
+                  <div>
+                    <strong>
+                      Manual approval required
+                    </strong>
+
+                    <p>
+                      The firewall has placed
+                      this payment in review.
+                    </p>
+                  </div>
+
+                  <button
+                    className="approve-button"
+                    onClick={
+                      approvePayment
+                    }
+                    disabled={
+                      approvalPending
+                    }
+                  >
+                    {approvalPending
+                      ? "Confirm in Wallet..."
+                      : "Approve Payment"}
+                  </button>
+                </div>
+              )}
+
+            {decision ===
+              "BLOCK" && (
+                <div className="payment-error">
+                  This payment was blocked by
+                  the APEX firewall.
+                </div>
+              )}
+
+            {approvalHash && (
+              <div className="status-row">
+                <span>
+                  Approval TX
+                </span>
+
+                <code>
+                  {approvalHash.slice(
+                    0,
+                    14
+                  )}
+                  ...
+                  {approvalHash.slice(-8)}
+                </code>
+              </div>
+            )}
+          </div>
+        )}
     </section>
   );
 }

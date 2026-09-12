@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useAccount, useChainId, useBalance } from "wagmi";
-import { WalletConnect } from "../components/WalletConnect";
+import { WalletConnect } from "../components/dashboard/WalletConnect";
 import { apexChain } from "../config/chains";
 
 export default function Home() {
