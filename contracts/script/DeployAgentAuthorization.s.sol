@@ -5,8 +5,12 @@ import {Script} from "forge-std/Script.sol";
 import {AgentAuthorization} from "../src/AgentAuthorization.sol";
 
 contract DeployAgentAuthorization is Script {
-    function run(address owner, address spendingVault) external returns (AgentAuthorization authorization) {
-        vm.startBroadcast();
+    function run() external returns (AgentAuthorization authorization) {
+        uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        address owner = vm.addr(deployerKey);
+        address spendingVault = vm.envAddress("AGENT_VAULT_ADDRESS");
+
+        vm.startBroadcast(deployerKey);
 
         authorization = new AgentAuthorization(owner, spendingVault);
 

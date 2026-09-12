@@ -1,0 +1,22 @@
+import AgentVaultArtifact from "./AgentSpendingVault.json";
+import ProviderRegistryArtifact from "./ProviderRegistry.json";
+import StakeManagerArtifact from "./StakeManager.json";
+import PaymentEscrowArtifact from "./PaymentEscrow.json";
+import AgentAuthorizationArtifact from "./AgentAuthorization.json";
+import PaymentFirewallArtifact from "./PaymentFirewall.json";
+import PaymentRouterArtifact from "./PaymentRouter.json";
+
+export const AgentSpendingVaultABI = AgentVaultArtifact.abi;
+export const ProviderRegistryABI = ProviderRegistryArtifact.abi;
+export const StakeManagerABI = StakeManagerArtifact.abi;
+export const PaymentEscrowABI = PaymentEscrowArtifact.abi;
+export const AgentAuthorizationABI = AgentAuthorizationArtifact.abi;
+export const PaymentFirewallABI = PaymentFirewallArtifact.abi;
+export const PaymentRouterABI = PaymentRouterArtifact.abi;
+export const paymentRouterAbi = PaymentRouterArtifact.abi;
+export const agentAuthorizationAbi = AgentAuthorizationArtifact.abi;
+export const agentSpendingVaultAbi = AgentVaultArtifact.abi;
+export const paymentEscrowAbi = PaymentEscrowArtifact.abi;
+export const paymentFirewallAbi = PaymentFirewallArtifact.abi;
+export const providerRegistryAbi = ProviderRegistryArtifact.abi;
+export const stakeManagerAbi = StakeManagerArtifact.abi;

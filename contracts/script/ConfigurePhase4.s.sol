@@ -4,12 +4,10 @@ pragma solidity ^0.8.24;
 import {Script, console} from "forge-std/Script.sol";
 import {PaymentEscrow} from "../src/PaymentEscrow.sol";
 import {StakeManager} from "../src/StakeManager.sol";
+import {AgentSpendingVault} from "../src/AgentSpendingVault.sol";
 
 /// @title ConfigurePhase4
 /// @notice Post-deployment wiring script.
-///         Authorizes the vault as a job creator on
-///         PaymentEscrow and authorizes escrow as a
-///         locker on StakeManager.
 contract ConfigurePhase4 is Script {
     function run() external {
         address escrowAddr = vm.envAddress("PAYMENT_ESCROW_ADDRESS");
@@ -20,17 +18,21 @@ contract ConfigurePhase4 is Script {
 
         PaymentEscrow escrow = PaymentEscrow(escrowAddr);
         StakeManager manager = StakeManager(stakeManagerAddr);
+        AgentSpendingVault vault = AgentSpendingVault(vaultAddr);
 
         vm.startBroadcast(deployerKey);
 
+        // Vault dependencies
+        vault.setPaymentEscrow(escrowAddr);
+        vault.setStakeManager(stakeManagerAddr);
+        console.log("Vault dependencies configured");
+
         // Authorize vault as a job creator
         escrow.setCreatorAuthorization(vaultAddr, true);
-
         console.log("Vault authorized as creator:", vaultAddr);
 
         // Authorize escrow as a locker on StakeManager
         manager.setLockerAuthorization(escrowAddr, true);
-
         console.log("Escrow authorized as locker:", escrowAddr);
 
         vm.stopBroadcast();

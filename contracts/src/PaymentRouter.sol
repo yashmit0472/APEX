@@ -32,15 +32,13 @@ contract PaymentRouter {
         if (intent.requestId == bytes32(0)) {
             revert InvalidRequestId();
         }
+
         if (msg.sender != intent.agent) {
             revert UnauthorizedCaller();
         }
 
-        if (msg.sender != intent.agent) {
-            revert UnauthorizedAgent(msg.sender, intent.agent);
-        }
-
         authorization.validateIntent(intent);
+
         (score, decision) = firewall.evaluate(intent.agent, intent.provider, intent.amount, intent.requestId);
 
         if (decision == IPaymentFirewall.Decision.REQUIRE_APPROVAL) {

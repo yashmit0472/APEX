@@ -1,9 +1,21 @@
 import { createConfig, http } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { injected } from "wagmi/connectors";
+import { apexChain } from "./chains";
 
 export const wagmiConfig = createConfig({
-  chains: [baseSepolia],
+  chains: [apexChain],
+
+  connectors: [
+    injected({
+      shimDisconnect: true,
+    }),
+  ],
+
   transports: {
-    [baseSepolia.id]: http(process.env.NEXT_PUBLIC_RPC_URL)
-  }
+    [apexChain.id]: http(
+      process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545"
+    ),
+  },
+
+  ssr: true,
 });
