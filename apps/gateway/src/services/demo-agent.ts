@@ -1,31 +1,18 @@
 /**
  * Demo Agent
  *
- * An autonomous agent that periodically:
- * 1. Picks a task from the queue
- * 2. Searches for eligible providers
- * 3. Selects the best provider (highest stake, matching service)
+ * An interactive agent that:
+ * 1. Takes a prompt from the user
+ * 2. Determines the required service and cost
+ * 3. Selects the best provider
  * 4. Evaluates risk through the firewall
- * 5. Executes payment if AUTO_PAY or FLAG
- * 6. Flags for human approval if REQUIRE_APPROVAL
- * 7. Aborts if BLOCK
- *
- * This is a rule-based autonomous agent that demonstrates
- * real decision-making without needing an LLM.
+ * 5. Executes payment and waits for provider delivery
  */
 
 import { simulator, type SimProvider, type SimJob } from "./simulator.js";
-import {
-  simulateProviderWork,
-  startProviderSimulation,
-  stopProviderSimulation,
-} from "./demo-providers.js";
+import { simulateProviderWork } from "./demo-providers.js";
 import { logDemoEvent } from "./demo-logger.js";
 import type { SeedTask } from "../config/demo-seed.js";
-
-let agentInterval: ReturnType<typeof setInterval> | null = null;
-let running = false;
-let speedMs = 5000; // ms between agent decisions
 
 export interface AgentDecision {
   timestamp: number;
@@ -41,53 +28,6 @@ export interface AgentDecision {
 let decisions: AgentDecision[] = [];
 
 /**
- * Start the autonomous demo agent loop.
- */
-export function startDemoAgent(speed?: number): void {
-  if (running) return;
-
-  if (speed) speedMs = speed;
-
-  running = true;
-
-  startProviderSimulation();
-
-  console.log(
-    `[demo-agent] Agent started (interval: ${speedMs}ms)`
-  );
-
-  // Run first tick immediately
-  agentTick();
-
-  agentInterval = setInterval(() => {
-    if (running) agentTick();
-  }, speedMs);
-}
-
-/**
- * Stop the autonomous demo agent.
- */
-export function stopDemoAgent(): void {
-  running = false;
-
-  if (agentInterval) {
-    clearInterval(agentInterval);
-    agentInterval = null;
-  }
-
-  stopProviderSimulation();
-
-  console.log("[demo-agent] Agent stopped");
-}
-
-/**
- * Check if the agent is running.
- */
-export function isDemoAgentRunning(): boolean {
-  return running;
-}
-
-/**
  * Get the agent's decision history.
  */
 export function getDecisions(): AgentDecision[] {
@@ -95,37 +35,41 @@ export function getDecisions(): AgentDecision[] {
 }
 
 /**
- * Set the agent's decision speed.
+ * Process a user prompt, deduce the required task, and execute the payment flow.
  */
-export function setAgentSpeed(ms: number): void {
-  speedMs = ms;
-
-  if (running && agentInterval) {
-    clearInterval(agentInterval);
-    agentInterval = setInterval(() => {
-      if (running) agentTick();
-    }, speedMs);
+export function processPrompt(prompt: string): AgentDecision {
+  const lowerPrompt = prompt.toLowerCase();
+  
+  let serviceType = "LLM_INFERENCE";
+  let estimatedCost = 5_000_000; // 5 USDC
+  let stakeRequired = 0;
+  
+  if (lowerPrompt.includes("gpu") || lowerPrompt.includes("render") || lowerPrompt.includes("train")) {
+    serviceType = "GPU_COMPUTE";
+    estimatedCost = 15_000_000;
+    stakeRequired = 50_000_000;
+  } else if (lowerPrompt.includes("data") || lowerPrompt.includes("dataset") || lowerPrompt.includes("market") || lowerPrompt.includes("price")) {
+    serviceType = "DATA_API";
+    estimatedCost = 10_000_000;
+    stakeRequired = 20_000_000;
+  } else if (lowerPrompt.includes("research") || lowerPrompt.includes("search") || lowerPrompt.includes("web") || lowerPrompt.includes("find")) {
+    serviceType = "WEB_RESEARCH";
+    estimatedCost = 8_000_000;
+    stakeRequired = 10_000_000;
+  } else if (lowerPrompt.includes("storage") || lowerPrompt.includes("store") || lowerPrompt.includes("backup")) {
+    serviceType = "STORAGE";
+    estimatedCost = 6_000_000;
+    stakeRequired = 30_000_000;
   }
-}
 
-/**
- * One tick of the agent's decision loop.
- */
-function agentTick(): void {
-  if (!running) return;
-
-  const task = pickNextTask();
-
-  if (!task) {
-    simulator.events.push({
-      id: Math.random().toString(36).slice(2),
-      timestamp: Date.now(),
-      type: "agent_idle",
-      message: "No tasks remaining in queue — agent idle",
-      data: {},
-    });
-    return;
-  }
+  const task: SeedTask = {
+    id: `task-prompt-${Date.now()}`,
+    description: prompt,
+    serviceType,
+    estimatedCost,
+    priority: "high",
+    stakeRequired,
+  };
 
   const decision = executeTask(task);
   decisions.push(decision);
@@ -150,27 +94,8 @@ function agentTick(): void {
       providerName: decision.selectedProvider?.name ?? null,
     },
   });
-}
 
-/**
- * Pick the next task using priority ordering.
- * High priority tasks are picked first, then medium, then low.
- */
-function pickNextTask(): SeedTask | null {
-  const queue = simulator.taskQueue;
-
-  if (queue.length === 0) return null;
-
-  // Sort by priority: high > medium > low
-  const priorityOrder = { high: 0, medium: 1, low: 2 };
-
-  queue.sort(
-    (a, b) =>
-      priorityOrder[a.priority] -
-      priorityOrder[b.priority]
-  );
-
-  return queue[0];
+  return decision;
 }
 
 /**
@@ -180,7 +105,11 @@ function executeTask(task: SeedTask): AgentDecision {
   const reasoning: string[] = [];
 
   reasoning.push(
-    `📋 Task: ${task.description} [${task.priority} priority]`
+    `📋 Received Prompt: "${task.description}"`
+  );
+  
+  reasoning.push(
+    `🧠 Analysis: Requires ${task.serviceType} access`
   );
 
   reasoning.push(
@@ -198,15 +127,8 @@ function executeTask(task: SeedTask): AgentDecision {
 
   if (candidates.length === 0) {
     reasoning.push(
-      `❌ No providers available for ${task.serviceType} — skipping task`
+      `❌ No providers available for ${task.serviceType} — aborting`
     );
-
-    // Move task to back of queue instead of removing
-    const idx = simulator.taskQueue.indexOf(task);
-    if (idx !== -1) {
-      simulator.taskQueue.splice(idx, 1);
-      simulator.taskQueue.push(task);
-    }
 
     return {
       timestamp: Date.now(),
@@ -231,14 +153,8 @@ function executeTask(task: SeedTask): AgentDecision {
 
   if (eligible.length === 0) {
     reasoning.push(
-      `❌ No eligible providers (need registration + active + minimum stake) — skipping`
+      `❌ No eligible providers (need registration + active + minimum stake) — aborting`
     );
-
-    const idx = simulator.taskQueue.indexOf(task);
-    if (idx !== -1) {
-      simulator.taskQueue.splice(idx, 1);
-      simulator.taskQueue.push(task);
-    }
 
     return {
       timestamp: Date.now(),
@@ -275,13 +191,6 @@ function executeTask(task: SeedTask): AgentDecision {
     reasoning.push(
       `🚫 Spending validation failed: ${spendCheck.reason}`
     );
-
-    // Don't remove from queue — might be possible later when daily resets
-    const idx = simulator.taskQueue.indexOf(task);
-    if (idx !== -1) {
-      simulator.taskQueue.splice(idx, 1);
-      simulator.taskQueue.push(task);
-    }
 
     return {
       timestamp: Date.now(),
@@ -324,12 +233,6 @@ function executeTask(task: SeedTask): AgentDecision {
       `🚨 BLOCKED by firewall — payment not executed`
     );
 
-    // Remove from queue — the task is effectively rejected
-    const idx = simulator.taskQueue.indexOf(task);
-    if (idx !== -1) {
-      simulator.taskQueue.splice(idx, 1);
-    }
-
     return {
       timestamp: Date.now(),
       task,
@@ -347,16 +250,10 @@ function executeTask(task: SeedTask): AgentDecision {
       `⏳ Requires human approval — payment pending`
     );
 
-    // Don't remove from queue yet — will be retried if approved
-    // In a real demo, a human would approve this
-    // For auto-demo, auto-approve after a delay
     setTimeout(() => {
       simulator.approveRequest(requestId);
-      // Re-execute the task
-      if (running) {
-        executeApprovedPayment(task, selected, requestId);
-      }
-    }, 3000 + Math.random() * 5000);
+      executeApprovedPayment(task, selected, requestId);
+    }, 3000);
 
     return {
       timestamp: Date.now(),
@@ -455,13 +352,6 @@ function executePaymentForTask(
   reasoning.push(
     `🎉 Job #${job.jobId} created — ${simulator._formatUSDC(task.estimatedCost)} escrowed`
   );
-
-  // Remove task from queue, add to completed
-  const idx = simulator.taskQueue.indexOf(task);
-  if (idx !== -1) {
-    simulator.taskQueue.splice(idx, 1);
-    simulator.completedTasks.push(task);
-  }
 
   // Trigger provider work simulation
   simulateProviderWork(job);

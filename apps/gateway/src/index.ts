@@ -9,11 +9,8 @@ import { executePayment } from "./services/payment.js";
 import { createEscrowJob } from "./services/escrow.js";
 import { simulator } from "./services/simulator.js";
 import {
-  startDemoAgent,
-  stopDemoAgent,
-  isDemoAgentRunning,
   getDecisions,
-  setAgentSpeed,
+  processPrompt,
 } from "./services/demo-agent.js";
 import { attachSimulatorLogger } from "./services/demo-logger.js";
 
@@ -84,57 +81,9 @@ if (env.demoMode) {
   // Attach Supabase logger
   attachSimulatorLogger();
 
-  // ── Demo Status ──────────────────────────────────
-
-  app.get("/v1/demo/status", (_req, res) => {
-    res.json({
-      demoMode: true,
-      agentRunning: isDemoAgentRunning(),
-      state: simulator.getState(),
-    });
-  });
-
-  // ── Start Agent ──────────────────────────────────
-
-  app.post("/v1/demo/start", (req, res) => {
-    if (isDemoAgentRunning()) {
-      return res.status(400).json({
-        error: "Agent is already running",
-      });
-    }
-
-    const speed = req.body?.speed ?? env.demoAgentSpeed;
-    startDemoAgent(speed);
-
-    return res.json({
-      status: "started",
-      speed,
-    });
-  });
-
-  // ── Stop Agent ───────────────────────────────────
-
-  app.post("/v1/demo/stop", (_req, res) => {
-    if (!isDemoAgentRunning()) {
-      return res.status(400).json({
-        error: "Agent is not running",
-      });
-    }
-
-    stopDemoAgent();
-
-    return res.json({
-      status: "stopped",
-    });
-  });
-
   // ── Reset Simulation ─────────────────────────────
 
   app.post("/v1/demo/reset", (_req, res) => {
-    if (isDemoAgentRunning()) {
-      stopDemoAgent();
-    }
-
     simulator.reset();
 
     return res.json({
@@ -143,22 +92,32 @@ if (env.demoMode) {
     });
   });
 
-  // ── Set Speed ────────────────────────────────────
+  // ── Demo Status ──────────────────────────────────
 
-  app.post("/v1/demo/speed", (req, res) => {
-    const speed = req.body?.speed;
+  app.get("/v1/demo/status", (_req, res) => {
+    res.json({
+      demoMode: true,
+      agentRunning: true,
+      state: simulator.getState(),
+    });
+  });
 
-    if (!speed || typeof speed !== "number" || speed < 500) {
+  // ── Prompt Agent ─────────────────────────────────
+
+  app.post("/v1/demo/prompt", (req, res) => {
+    const prompt = req.body?.prompt;
+
+    if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({
-        error: "Speed must be a number >= 500 (ms)",
+        error: "Prompt is required",
       });
     }
 
-    setAgentSpeed(speed);
+    const decision = processPrompt(prompt);
 
     return res.json({
-      status: "speed_updated",
-      speed,
+      status: "processed",
+      decision,
     });
   });
 
@@ -284,10 +243,8 @@ app.listen(env.port, () => {
   if (env.demoMode) {
     console.log("  Demo endpoints:");
     console.log(`    GET  /v1/demo/status`);
-    console.log(`    POST /v1/demo/start`);
-    console.log(`    POST /v1/demo/stop`);
+    console.log(`    POST /v1/demo/prompt`);
     console.log(`    POST /v1/demo/reset`);
-    console.log(`    POST /v1/demo/speed`);
     console.log(`    GET  /v1/demo/providers`);
     console.log(`    GET  /v1/demo/jobs`);
     console.log(`    GET  /v1/demo/events`);

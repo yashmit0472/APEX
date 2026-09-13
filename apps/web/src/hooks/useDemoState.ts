@@ -196,70 +196,38 @@ export function useDemoState() {
     }
   }, []);
 
-  const startAgent = useCallback(
-    async (speed?: number) => {
+  const submitPrompt = useCallback(
+    async (prompt: string) => {
       try {
         const res = await fetch(
-          `${GATEWAY_URL}/v1/demo/start`,
+          `${GATEWAY_URL}/v1/demo/prompt`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ speed }),
+            body: JSON.stringify({ prompt }),
           }
         );
 
         if (!res.ok) {
           const data = await res.json();
-          throw new Error(data.error ?? "Failed to start");
+          throw new Error(data.error ?? "Failed to process prompt");
         }
 
-        setState((prev) =>
-          prev
-            ? { ...prev, agentRunning: true }
-            : prev
-        );
+        // Fetch new decisions immediately
+        fetchDecisions();
 
         return true;
       } catch (err) {
         setError(
           err instanceof Error
             ? err.message
-            : "Failed to start agent"
+            : "Failed to process prompt"
         );
         return false;
       }
     },
     []
   );
-
-  const stopAgent = useCallback(async () => {
-    try {
-      const res = await fetch(
-        `${GATEWAY_URL}/v1/demo/stop`,
-        { method: "POST" }
-      );
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "Failed to stop");
-      }
-
-      setState((prev) =>
-        prev
-          ? { ...prev, agentRunning: false }
-          : prev
-      );
-
-      return true;
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to stop agent"
-      );
-      return false;
-    }
-  }, []);
 
   const resetSimulation = useCallback(async () => {
     try {
@@ -292,29 +260,7 @@ export function useDemoState() {
     }
   }, []);
 
-  const setSpeed = useCallback(async (ms: number) => {
-    try {
-      const res = await fetch(
-        `${GATEWAY_URL}/v1/demo/speed`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ speed: ms }),
-        }
-      );
 
-      if (!res.ok) throw new Error("Failed to set speed");
-
-      return true;
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to set speed"
-      );
-      return false;
-    }
-  }, []);
 
   const fetchDecisions = useCallback(async () => {
     try {
@@ -360,10 +306,8 @@ export function useDemoState() {
     decisions,
     error,
 
-    startAgent,
-    stopAgent,
+    submitPrompt,
     resetSimulation,
-    setSpeed,
     fetchStatus,
     fetchDecisions,
 

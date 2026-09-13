@@ -136,6 +136,10 @@ function eventDetails(event: DemoEvent): string[] {
     details.push(`Request: ${data.requestId}`);
   }
 
+  if (event.type === "job_settled" && data.resultData) {
+    details.push(`📦 Results received:\n${JSON.stringify(data.resultData, null, 2)}`);
+  }
+
   return details;
 }
 
@@ -323,14 +327,14 @@ export function AgentReasoningLog({
               </div>
 
               {entry.details.length > 0 && (
-                <div className="mt-3 space-y-1 border-t border-zinc-800 pt-3">
-                  {entry.details.slice(0, 8).map((detail, index) => (
-                    <p
+                <div className="mt-3 space-y-2 border-t border-zinc-800 pt-3">
+                  {entry.details.map((detail, index) => (
+                    <div
                       key={`${entry.id}-detail-${index}`}
-                      className="text-xs leading-5 text-zinc-500"
+                      className="text-xs leading-5 text-zinc-400 whitespace-pre-wrap font-mono bg-black/20 p-2 rounded border border-white/5"
                     >
                       {detail}
-                    </p>
+                    </div>
                   ))}
                 </div>
               )}

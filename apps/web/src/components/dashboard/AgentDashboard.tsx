@@ -155,8 +155,16 @@ export function AgentDashboard() {
 
   /*
    * Wallet connection state.
+   * If demo mode is active (or ?demo=true is in the URL), we bypass the real wallet requirement.
    */
-  if (!isConnected || !address) {
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const isDemoParam = searchParams?.get('demo') === 'true' || searchParams?.get('mock') === 'true';
+  const isDemo = demo.connected || isDemoParam;
+  const activeAddress = isDemo 
+    ? (demo.state?.state?.agent.address ?? "0xDEMO000000000000000000000000000000000000") 
+    : address;
+
+  if (!isDemo && (!isConnected || !activeAddress)) {
     return (
       <div className="rounded-2xl border border-red-900/40 bg-zinc-950 p-8 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-xl text-red-400">
@@ -307,15 +315,13 @@ export function AgentDashboard() {
       {/* DEMO CONTROLS                                           */}
       {/* ====================================================== */}
 
-      {demo.connected && (
+      {isDemo && (
         <DemoControls
           state={demo.state}
           connected={demo.connected}
           error={demo.error}
-          onStart={demo.startAgent}
-          onStop={demo.stopAgent}
+          onSubmitPrompt={demo.submitPrompt}
           onReset={demo.resetSimulation}
-          onSpeedChange={demo.setSpeed}
         />
       )}
 
@@ -366,7 +372,7 @@ export function AgentDashboard() {
           </p>
 
           <p className="mt-1 font-mono text-sm text-white">
-            {formatAddress(address)}
+            {formatAddress(activeAddress as string)}
           </p>
         </div>
       </div>
@@ -380,7 +386,7 @@ export function AgentDashboard() {
 
           <InfoBlock
             label="Connected Wallet"
-            value={formatAddress(address)}
+            value={formatAddress(activeAddress as string)}
             mono
           />
 

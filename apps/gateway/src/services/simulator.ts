@@ -65,6 +65,7 @@ export interface SimJob {
   deliveryHash: string;
   status: JobStatus;
   taskDescription: string;
+  resultData?: any;
 }
 
 export interface SimFirewallResult {
@@ -680,6 +681,7 @@ export class SimulationEngine {
       deliveryHash: "",
       status: "Funded",
       taskDescription,
+      resultData: null,
     };
 
     this.jobs.set(jobId, job);
@@ -706,7 +708,8 @@ export class SimulationEngine {
 
   submitDelivery(
     jobId: number,
-    deliveryHash?: string
+    deliveryHash?: string,
+    resultData?: any
   ): boolean {
     const job = this.jobs.get(jobId);
 
@@ -734,8 +737,11 @@ export class SimulationEngine {
         provider: job.provider,
         providerName,
         deliveryHash: job.deliveryHash,
+        resultData,
       }
     );
+
+    job.resultData = resultData;
 
     return true;
   }
@@ -767,6 +773,7 @@ export class SimulationEngine {
         provider: job.provider,
         providerName,
         amount: job.amount,
+        resultData: job.resultData,
       }
     );
 

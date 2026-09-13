@@ -42,6 +42,43 @@ export function stopProviderSimulation(): void {
   console.log("[demo-providers] Provider simulation stopped");
 }
 
+function generateMockData(serviceType: string, taskDescription: string) {
+  if (serviceType === "GPU_COMPUTE") {
+    return {
+      providers: [
+        { model: "A100 80GB", pricePerHour: 1.25, availability: "High" },
+        { model: "H100 PCIe", pricePerHour: 2.50, availability: "Low" },
+        { model: "RTX 4090", pricePerHour: 0.45, availability: "Medium" }
+      ],
+      recommendation: "RTX 4090 offers the best cost-to-performance ratio for this workload."
+    };
+  }
+  if (serviceType === "DATA_API") {
+    return {
+      dataset: "market_data_2026",
+      rowsReturned: 50000,
+      sample: [
+        { symbol: "BTC", price: 85200, volume: 15200000 },
+        { symbol: "ETH", price: 4200, volume: 5500000 }
+      ]
+    };
+  }
+  if (serviceType === "WEB_RESEARCH") {
+    return {
+      summary: "Found relevant sources matching the query.",
+      sources: [
+        "https://example.com/source-1",
+        "https://example.com/source-2"
+      ],
+      keyFindings: [
+        "The market is trending upwards.",
+        "New competitor entered the space."
+      ]
+    };
+  }
+  return { success: true, message: "Task completed successfully" };
+}
+
 /**
  * Called by the demo agent after a job is created.
  * Simulates the provider receiving the job, doing work,
@@ -69,9 +106,13 @@ export function simulateProviderWork(job: SimJob): void {
     const success = Math.random() < provider.reliability;
 
     if (success) {
+      const resultData = generateMockData(provider.serviceType, job.taskDescription);
+
       // Provider submits delivery
       const delivered = simulator.submitDelivery(
-        job.jobId
+        job.jobId,
+        undefined,
+        resultData
       );
 
       if (delivered) {
