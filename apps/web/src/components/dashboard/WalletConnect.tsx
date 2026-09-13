@@ -26,6 +26,7 @@ export function WalletConnect() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
@@ -103,14 +104,14 @@ export function WalletConnect() {
 
       <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-xs text-white/50">
         <p>
-          Connectors: {connectors.length}
+          Connectors: {mounted ? connectors.length : "—"}
         </p>
 
         <p className="mt-2">
           Connector:{" "}
-          {connectors
+          {mounted ? (connectors
             .map((connector) => connector.name)
-            .join(", ") || "None"}
+            .join(", ") || "None") : "—"}
         </p>
       </div>
     </div>

@@ -6,8 +6,11 @@ import { useAccount, useBalance } from "wagmi";
 import { PaymentRequest } from "./PaymentRequest";
 import { WalletConnect } from "./WalletConnect";
 import { ActivityTable } from "./ActivityTable";
+import { DemoControls } from "./DemoControls";
+import { AgentReasoningLog } from "./AgentReasoningLog";
 
 import { useActivity } from "../../hooks/useActivity";
+import { useDemoState } from "../../hooks/useDemoState";
 
 import {
   useVaultAgent,
@@ -18,9 +21,10 @@ import {
   useVaultRemainingDailyAllowance,
   useVaultTotalSpent,
 } from "../../hooks/useApexContracts";
+import { CONTRACTS, contracts } from "../../config/contracts";
 
 const formatUSDC = (value: unknown) => {
-  const numericValue = toNumber(value);
+  const numericValue = toNumber(value) ?? 0;
 
   if (numericValue === null) return "—";
 
@@ -31,17 +35,6 @@ const formatAddress = (address: string | undefined) => {
   if (!address) return "—";
 
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
-};
-
-const formatETH = (
-  value: bigint | undefined,
-  decimals: number | undefined
-) => {
-  if (value === undefined || decimals === undefined) {
-    return "0.0000";
-  }
-
-  return (Number(value) / 10 ** decimals).toFixed(4);
 };
 
 /**
@@ -83,13 +76,21 @@ export function AgentDashboard() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
   const { address, isConnected } = useAccount();
 
-  const { data: nativeBalance } = useBalance({
-    address,
+  const { data: vaultUsdcBalance } = useBalance({
+    address: contracts.agentSpendingVault.address,
+    token: CONTRACTS.USDC,
+    query: {
+      enabled: Boolean(
+        contracts.agentSpendingVault.address &&
+        CONTRACTS.USDC
+      ),
+    },
   });
 
   const { data: policy } = useVaultPolicy();
@@ -133,6 +134,11 @@ export function AgentDashboard() {
     | "REQUIRE_APPROVAL"
     | "BLOCK";
   } | null>(null);
+
+  /*
+   * Demo mode state.
+   */
+  const demo = useDemoState();
 
   /*
    * Don't render wallet-dependent UI until mounted.
@@ -186,30 +192,67 @@ export function AgentDashboard() {
   const perTxCap = policyData?.[1];
   const dailyCap = policyData?.[2];
 
+  const demoAgent = demo.state?.state?.agent;
+  const demoProviders = demo.state?.state?.providers ?? [];
+  const demoStats =
+    demo.state?.state?.stats ?? {
+      totalJobs: 0,
+      settledJobs: 0,
+      refundedJobs: 0,
+      activeJobs: 0,
+      pendingTasks: 0,
+      completedTasks: 0,
+    };
+
+  const displayMaxSpend =
+    demoAgent?.policy.maxSpend ?? maxSpend;
+
+  const displayPerTxCap =
+    demoAgent?.policy.perTxCap ?? perTxCap;
+
+  const displayDailyCap =
+    demoAgent?.policy.dailyCap ?? dailyCap;
+
+  const displayRemainingAllowance =
+    demoAgent?.remainingAllowance ?? remainingAllowance;
+
+  const displayRemainingDailyAllowance =
+    demoAgent?.remainingDailyAllowance ?? remainingDailyAllowance;
+
+  const displayTotalSpent =
+    demoAgent?.totalSpent ?? totalSpent;
+
+  const displayDailySpent =
+    demoAgent?.dailySpent ?? dailySpent;
+
+  const displayVaultBalance =
+    demoAgent?.vaultBalance ?? vaultUsdcBalance?.value;
+
+  const displayVaultAgent =
+    demoAgent?.address ?? (vaultAgent as string | undefined);
+
+  const displayPaused = demo.connected
+    ? false
+    : Boolean(paused);
+
   /*
    * Convert blockchain values to normal numbers for
    * dashboard calculations.
    */
   const maxSpendNumber =
-    toNumber(maxSpend) ?? 0;
-
-  const perTxCapNumber =
-    toNumber(perTxCap) ?? 0;
+    toNumber(displayMaxSpend) ?? 0;
 
   const dailyCapNumber =
-    toNumber(dailyCap) ?? 0;
+    toNumber(displayDailyCap) ?? 0;
 
   const remainingAllowanceNumber =
-    toNumber(remainingAllowance) ?? 0;
+    toNumber(displayRemainingAllowance) ?? 0;
 
   const remainingDailyAllowanceNumber =
-    toNumber(remainingDailyAllowance) ?? 0;
-
-  const totalSpentNumber =
-    toNumber(totalSpent) ?? 0;
+    toNumber(displayRemainingDailyAllowance) ?? 0;
 
   const dailySpentNumber =
-    toNumber(dailySpent) ?? 0;
+    toNumber(displayDailySpent) ?? 0;
 
   /*
    * Calculate allowance percentages using normal numbers.
@@ -240,7 +283,7 @@ export function AgentDashboard() {
       )
       : 0;
 
-  const vaultIsActive = !Boolean(paused);
+  const vaultIsActive = !displayPaused;
 
   /*
    * Latest firewall values.
@@ -252,8 +295,29 @@ export function AgentDashboard() {
   const firewallDecision =
     latestDecision?.decision ?? null;
 
+  // Latest firewall breakdown from demo decisions
+  const latestDemoDecision = demo.decisions.length > 0
+    ? demo.decisions[demo.decisions.length - 1]
+    : null;
+
   return (
     <div className="space-y-6">
+
+      {/* ====================================================== */}
+      {/* DEMO CONTROLS                                           */}
+      {/* ====================================================== */}
+
+      {demo.connected && (
+        <DemoControls
+          state={demo.state}
+          connected={demo.connected}
+          error={demo.error}
+          onStart={demo.startAgent}
+          onStop={demo.stopAgent}
+          onReset={demo.resetSimulation}
+          onSpeedChange={demo.setSpeed}
+        />
+      )}
 
       {/* ====================================================== */}
       {/* HEADER                                                  */}
@@ -322,18 +386,13 @@ export function AgentDashboard() {
 
           <InfoBlock
             label="Vault Agent"
-            value={formatAddress(
-              vaultAgent as string | undefined
-            )}
+            value={formatAddress(displayVaultAgent)}
             mono
           />
 
           <InfoBlock
-            label="Native Balance"
-            value={`${formatETH(
-              nativeBalance?.value,
-              nativeBalance?.decimals
-            )} ETH`}
+            label="Vault Balance"
+            value={formatUSDC(displayVaultBalance)}
           />
 
         </div>
@@ -353,21 +412,19 @@ export function AgentDashboard() {
 
           <MetricCard
             title="Agent Allowance"
-            value={formatUSDC(maxSpend)}
+            value={formatUSDC(displayMaxSpend)}
             description="Maximum authorized spend"
           />
 
           <MetricCard
             title="Total Spent"
-            value={formatUSDC(totalSpent)}
+            value={formatUSDC(displayTotalSpent)}
             description="Total vault spending"
           />
 
           <MetricCard
             title="Remaining"
-            value={formatUSDC(
-              remainingAllowance
-            )}
+            value={formatUSDC(displayRemainingAllowance)}
             description="Available overall allowance"
             status={
               remainingAllowanceNumber > 0
@@ -378,9 +435,9 @@ export function AgentDashboard() {
 
           <MetricCard
             title="Spent Today"
-            value={formatUSDC(dailySpent)}
+            value={formatUSDC(displayDailySpent)}
             description={`Daily cap ${formatUSDC(
-              dailyCap
+              displayDailyCap
             )}`}
             status={
               dailySpentNumber <
@@ -407,21 +464,19 @@ export function AgentDashboard() {
 
           <MetricCard
             title="Per Transaction Cap"
-            value={formatUSDC(perTxCap)}
+            value={formatUSDC(displayPerTxCap)}
             description="Maximum single payment"
           />
 
           <MetricCard
             title="Daily Cap"
-            value={formatUSDC(dailyCap)}
+            value={formatUSDC(displayDailyCap)}
             description="Maximum daily spending"
           />
 
           <MetricCard
             title="Remaining Daily"
-            value={formatUSDC(
-              remainingDailyAllowance
-            )}
+            value={formatUSDC(displayRemainingDailyAllowance)}
             description="Available today"
             status={
               remainingDailyAllowanceNumber > 0
@@ -444,7 +499,7 @@ export function AgentDashboard() {
           description="Remaining authorized lifetime spend."
           percentage={remainingPercentage}
           value={`${formatUSDC(
-            remainingAllowance
+            displayRemainingAllowance
           )} remaining`}
         />
 
@@ -453,7 +508,7 @@ export function AgentDashboard() {
           description="Remaining spending capacity for today."
           percentage={dailyRemainingPercentage}
           value={`${formatUSDC(
-            remainingDailyAllowance
+            displayRemainingDailyAllowance
           )} remaining`}
         />
 
@@ -552,27 +607,31 @@ export function AgentDashboard() {
 
               <RiskRow
                 label="Amount Risk"
-                value="—"
+                value={latestDemoDecision?.firewallScore !== null && latestDemoDecision
+                  ? String(latestDemoDecision.firewallScore)
+                  : "—"}
               />
 
               <RiskRow
-                label="Budget Risk"
-                value="—"
+                label="Stake Risk"
+                value={latestDemoDecision?.selectedProvider
+                  ? `${Math.round(latestDemoDecision.selectedProvider.reliability * 100)}%`
+                  : "—"}
               />
 
               <RiskRow
-                label="Provider Risk"
-                value="—"
+                label="Provider"
+                value={latestDemoDecision?.selectedProvider?.name ?? "—"}
               />
 
               <RiskRow
-                label="Frequency Risk"
-                value="—"
+                label="Firewall Decision"
+                value={latestDemoDecision?.firewallDecision ?? "—"}
               />
 
               <RiskRow
-                label="Reputation Risk"
-                value="—"
+                label="Outcome"
+                value={latestDemoDecision?.outcome?.replace("_", " ").toUpperCase() ?? "—"}
               />
 
             </div>
@@ -639,36 +698,76 @@ export function AgentDashboard() {
 
             <ProviderCard
               title="Registered Providers"
-              value="—"
+              value={String(
+                demoProviders.filter((p) => p.registered).length
+              )}
               description="Provider registry data"
             />
 
             <ProviderCard
               title="Eligible Providers"
-              value="—"
+              value={String(
+                demoProviders.filter((p) => p.eligible).length
+              )}
               description="Providers meeting stake requirements"
             />
 
             <ProviderCard
-              title="Provider Risk"
-              value="—"
-              description="Latest provider risk state"
+              title="Active Jobs"
+              value={String(demoStats.activeJobs)}
+              description="Currently in-flight escrow jobs"
             />
 
           </div>
 
-          <div className="mt-5 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 p-6 text-center">
-
-            <p className="text-sm text-zinc-500">
-              Provider activity will appear here once
-              provider/indexer data is available.
-            </p>
-
-            <p className="mt-1 text-xs text-zinc-700">
-              On-chain eligibility remains authoritative.
-            </p>
-
-          </div>
+          {demoProviders.length > 0 ? (
+            <div className="mt-5 space-y-2">
+              {demoProviders.map((p) => (
+                <div
+                  key={p.address}
+                  className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        p.active && p.eligible
+                          ? "bg-emerald-400"
+                          : p.active
+                            ? "bg-amber-400"
+                            : "bg-red-400"
+                      }`}
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-white">
+                        {p.name}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {p.serviceType} · {p.address.slice(0, 6)}...{p.address.slice(-4)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-white">
+                      ${((p.availableStake ?? (p.stakedBalance - p.lockedBalance)) / 1_000_000).toFixed(2)}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      stake available · {Math.round(p.reliability * 100)}% reliable
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-5 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 p-6 text-center">
+              <p className="text-sm text-zinc-500">
+                Provider activity will appear here once
+                provider/indexer data is available.
+              </p>
+              <p className="mt-1 text-xs text-zinc-700">
+                On-chain eligibility remains authoritative.
+              </p>
+            </div>
+          )}
 
         </div>
 
@@ -687,26 +786,22 @@ export function AgentDashboard() {
 
           <StatusRow
             label="Total spent"
-            value={formatUSDC(totalSpent)}
+            value={formatUSDC(displayTotalSpent)}
           />
 
           <StatusRow
             label="Today's spending"
-            value={formatUSDC(dailySpent)}
+            value={formatUSDC(displayDailySpent)}
           />
 
           <StatusRow
             label="Remaining allowance"
-            value={formatUSDC(
-              remainingAllowance
-            )}
+            value={formatUSDC(displayRemainingAllowance)}
           />
 
           <StatusRow
             label="Remaining daily"
-            value={formatUSDC(
-              remainingDailyAllowance
-            )}
+            value={formatUSDC(displayRemainingDailyAllowance)}
           />
 
         </DashboardPanel>
@@ -725,28 +820,26 @@ export function AgentDashboard() {
           <StatusRow
             label="Vault"
             value={
-              paused
+              displayPaused
                 ? "Paused"
                 : "Active"
             }
-            active={!paused}
+            active={!displayPaused}
           />
 
           <StatusRow
             label="Agent"
-            value={formatAddress(
-              vaultAgent as string | undefined
-            )}
+            value={formatAddress(displayVaultAgent)}
           />
 
           <StatusRow
             label="Policy"
             value={
-              policy
+              demo.connected || policy
                 ? "Configured"
                 : "Loading"
             }
-            active={!!policy}
+            active={demo.connected || !!policy}
           />
 
         </DashboardPanel>
@@ -831,6 +924,17 @@ export function AgentDashboard() {
       </section>
 
       {/* ====================================================== */}
+      {/* AGENT LOGBOOK                                            */}
+      {/* ====================================================== */}
+
+      <AgentReasoningLog
+        decisions={demo.decisions}
+        events={demo.events}
+        activities={activities}
+        mode={demo.connected ? "demo" : "real"}
+      />
+
+      {/* ====================================================== */}
       {/* SECURITY BOUNDARY                                       */}
       {/* ====================================================== */}
 
@@ -845,14 +949,20 @@ export function AgentDashboard() {
             </p>
 
             <h2 className="mt-2 text-lg font-semibold text-white">
-              Spending limits are enforced on-chain
+              {demo.connected
+                ? "Spending limits enforced by simulation engine"
+                : "Spending limits are enforced on-chain"}
             </h2>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
-              The dashboard and AI agent cannot override the
-              vault&apos;s allowance, per-transaction cap or
-              daily spending limits. Direct over-budget
-              contract calls must revert.
+              {demo.connected
+                ? "The demo simulation enforces identical spending policies, " +
+                  "firewall risk scoring, and escrow lifecycle rules as the on-chain contracts. " +
+                  "No real money is used."
+                : "The dashboard and AI agent cannot override the " +
+                  "vault's allowance, per-transaction cap or " +
+                  "daily spending limits. Direct over-budget " +
+                  "contract calls must revert."}
             </p>
 
           </div>
@@ -861,10 +971,14 @@ export function AgentDashboard() {
 
             <div className="flex items-center gap-2">
 
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              <span className={`h-2 w-2 rounded-full ${
+                demo.connected ? "bg-amber-400" : "bg-emerald-400"
+              }`} />
 
-              <span className="text-sm font-medium text-emerald-400">
-                ON-CHAIN ENFORCED
+              <span className={`text-sm font-medium ${
+                demo.connected ? "text-amber-400" : "text-emerald-400"
+              }`}>
+                {demo.connected ? "SIMULATION MODE" : "ON-CHAIN ENFORCED"}
               </span>
 
             </div>
@@ -1154,3 +1268,4 @@ function StatusRow({
     </div>
   );
 }
+
