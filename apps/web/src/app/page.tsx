@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
+
 import Link from "next/link";
 import { useAccount, useChainId, useBalance } from "wagmi";
 import { WalletConnect } from "../components/dashboard/WalletConnect";
@@ -9,6 +11,11 @@ export default function Home() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { data: balance } = useBalance({ address });
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#080808] text-white">
@@ -54,7 +61,7 @@ export default function Home() {
                 <p>
                   Chain:{" "}
                   <span className="text-white">
-                    {chainId === apexChain.id
+                    {!mounted ? "Loading..." : chainId === apexChain.id
                       ? "APEX Anvil"
                       : chainId || "Not connected"}
                   </span>
@@ -65,7 +72,7 @@ export default function Home() {
                   <span className="text-white">{apexChain.id}</span>
                 </p>
 
-                {isConnected && address && (
+                {mounted && isConnected && address && (
                   <p className="break-all">
                     Wallet: <span className="text-white">{address}</span>
                   </p>
@@ -73,7 +80,7 @@ export default function Home() {
               </div>
             </div>
 
-            {address && (
+            {mounted && address && (
               <div className="mt-6 rounded-xl border border-red-900/40 bg-zinc-950 p-5">
                 <p className="text-sm text-zinc-400">Wallet</p>
 

@@ -48,7 +48,7 @@ export function DemoControls({
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400">
-            🎮
+            D
           </div>
 
           <div>

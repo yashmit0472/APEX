@@ -137,7 +137,7 @@ function eventDetails(event: DemoEvent): string[] {
   }
 
   if (event.type === "job_settled" && data.resultData) {
-    details.push(`📦 Results received:\n${JSON.stringify(data.resultData, null, 2)}`);
+    details.push(`Results received:\n${JSON.stringify(data.resultData, null, 2)}`);
   }
 
   return details;

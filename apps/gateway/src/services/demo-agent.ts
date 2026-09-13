@@ -105,15 +105,15 @@ function executeTask(task: SeedTask): AgentDecision {
   const reasoning: string[] = [];
 
   reasoning.push(
-    `📋 Received Prompt: "${task.description}"`
+    `Received Prompt: "${task.description}"`
   );
   
   reasoning.push(
-    `🧠 Analysis: Requires ${task.serviceType} access`
+    `Analysis: Requires ${task.serviceType} access`
   );
 
   reasoning.push(
-    `💰 Estimated cost: ${simulator._formatUSDC(task.estimatedCost)}`
+    `Estimated cost: ${simulator._formatUSDC(task.estimatedCost)}`
   );
 
   // Step 1: Find providers for this service type
@@ -122,12 +122,12 @@ function executeTask(task: SeedTask): AgentDecision {
   );
 
   reasoning.push(
-    `🔍 Found ${candidates.length} provider(s) offering ${task.serviceType}`
+    `Found ${candidates.length} provider(s) offering ${task.serviceType}`
   );
 
   if (candidates.length === 0) {
     reasoning.push(
-      `❌ No providers available for ${task.serviceType} — aborting`
+      `No providers available for ${task.serviceType} — aborting`
     );
 
     return {
@@ -148,12 +148,12 @@ function executeTask(task: SeedTask): AgentDecision {
   );
 
   reasoning.push(
-    `✅ ${eligible.length} provider(s) meet eligibility requirements`
+    `${eligible.length} provider(s) meet eligibility requirements`
   );
 
   if (eligible.length === 0) {
     reasoning.push(
-      `❌ No eligible providers (need registration + active + minimum stake) — aborting`
+      `No eligible providers (need registration + active + minimum stake) — aborting`
     );
 
     return {
@@ -179,7 +179,7 @@ function executeTask(task: SeedTask): AgentDecision {
   const selected = ranked[0];
 
   reasoning.push(
-    `🏆 Selected: ${selected.name} (${selected.address.slice(0, 6)}...${selected.address.slice(-4)}) — available stake: ${simulator._formatUSDC(simulator.availableStake(selected.address))}`
+    `Selected: ${selected.name} (${selected.address.slice(0, 6)}...${selected.address.slice(-4)}) — available stake: ${simulator._formatUSDC(simulator.availableStake(selected.address))}`
   );
 
   // Step 4: Validate spending limits
@@ -189,7 +189,7 @@ function executeTask(task: SeedTask): AgentDecision {
 
   if (!spendCheck.valid) {
     reasoning.push(
-      `🚫 Spending validation failed: ${spendCheck.reason}`
+      `Spending validation failed: ${spendCheck.reason}`
     );
 
     return {
@@ -204,7 +204,7 @@ function executeTask(task: SeedTask): AgentDecision {
     };
   }
 
-  reasoning.push(`✅ Spending validation passed`);
+  reasoning.push(`Spending validation passed`);
 
   // Step 5: Evaluate through the firewall
   const requestId = simulator.generateRequestId();
@@ -217,7 +217,7 @@ function executeTask(task: SeedTask): AgentDecision {
   );
 
   reasoning.push(
-    `🛡️ Firewall score: ${firewallResult.score}/100 → ${firewallResult.decision}`
+    `Firewall score: ${firewallResult.score}/100 → ${firewallResult.decision}`
   );
 
   reasoning.push(
@@ -230,7 +230,7 @@ function executeTask(task: SeedTask): AgentDecision {
   // Step 6: Act on firewall decision
   if (firewallResult.decision === "BLOCK") {
     reasoning.push(
-      `🚨 BLOCKED by firewall — payment not executed`
+      `BLOCKED by firewall — payment not executed`
     );
 
     return {
@@ -247,7 +247,7 @@ function executeTask(task: SeedTask): AgentDecision {
 
   if (firewallResult.decision === "REQUIRE_APPROVAL") {
     reasoning.push(
-      `⏳ Requires human approval — payment pending`
+      `Requires human approval — payment pending`
     );
 
     setTimeout(() => {
@@ -269,10 +269,10 @@ function executeTask(task: SeedTask): AgentDecision {
 
   if (firewallResult.decision === "FLAG") {
     reasoning.push(
-      `⚠️ Flagged but proceeding with payment`
+      `Flagged but proceeding with payment`
     );
   } else {
-    reasoning.push(`✅ AUTO_PAY — proceeding`);
+    reasoning.push(`AUTO_PAY — proceeding`);
   }
 
   // Step 7: Execute payment
@@ -295,7 +295,7 @@ function executeApprovedPayment(
   _requestId: string
 ): void {
   const reasoning = [
-    `✅ Human approval received for ${task.description}`,
+    `Human approval received for ${task.description}`,
     `Proceeding with payment to ${provider.name}`,
   ];
 
@@ -334,7 +334,7 @@ function executePaymentForTask(
 
   if (!job) {
     reasoning.push(
-      `❌ Job creation failed — check vault balance and policy`
+      `Job creation failed — check vault balance and policy`
     );
 
     return {
@@ -350,14 +350,14 @@ function executePaymentForTask(
   }
 
   reasoning.push(
-    `🎉 Job #${job.jobId} created — ${simulator._formatUSDC(task.estimatedCost)} escrowed`
+    `Job #${job.jobId} created — ${simulator._formatUSDC(task.estimatedCost)} escrowed`
   );
 
   // Trigger provider work simulation
   simulateProviderWork(job);
 
   reasoning.push(
-    `⏳ Waiting for ${provider.name} to deliver...`
+    `Waiting for ${provider.name} to deliver...`
   );
 
   // Log to Supabase
